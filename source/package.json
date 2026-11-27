@@ -1,0 +1,25 @@
+{
+  "name": "bach-attack",
+  "gameTitle": "BACH ATTACK!",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BACH ATTACK! \u2014 single-file third-person trap-defence game (three.js, esbuild one-file build)",
+  "scripts": {
+    "build": "node build.mjs && cp dist/index.html ../index.html",
+    "build:readable": "node build.mjs --readable",
+    "soak": "node tools/soak.mjs",
+    "balance": "node tools/balance.mjs 4207 --shoot",
+    "smoke": "node tools/smoke.mjs",
+    "shots": "node tools/poses.mjs"
+  },
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.0",
+    "jpeg-js": "^0.4.4",
+    "playwright": "^1.56.1",
+    "pngjs": "^7.0.0"
+  }
+}

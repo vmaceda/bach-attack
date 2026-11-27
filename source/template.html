@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="color-scheme" content="dark">
+<title>{{TITLE}}</title>
+<link rel="icon" href="data:,">
+<style>/*CSS*/</style>
+</head>
+<body>
+<canvas id="c" aria-label="{{TITLE}}"></canvas>
+
+<div id="ui" class="ui" data-state="boot">
+  <!-- HUD -->
+  <div id="hud" class="hud" hidden>
+    <div class="panel wave-panel">
+      <div class="wave-title"><span data-bind="waveNo">WAVE 1/8</span> <b data-bind="waveName"></b></div>
+      <div class="wave-status" data-bind="waveStatus"></div>
+      <div class="wave-preview" data-bind="wavePreview"></div>
+    </div>
+    <div class="panel res-panel">
+      <div class="money"><span class="ico">🪙</span> <b data-bind="money">0</b> <small>shrapnel</small></div>
+      <div class="fridge-label">🍺 Beers in the fridge <b data-bind="fridgeTxt"></b></div>
+      <div class="bar fridge-bar"><i data-bind="fridgeBar"></i></div>
+    </div>
+    <div class="callout-wrap"><div class="callout" data-bind="callout"></div><div class="callout-chain" data-bind="calloutChain"></div><div class="streak" data-bind="streak"></div></div>
+    <div class="banner" data-bind="banner"></div>
+    <div class="toasts" data-bind="toasts"></div>
+    <div class="crosshair" data-bind="crosshair"><i></i><span class="place-tip" data-bind="placeTip"></span></div>
+    <div class="panel player-panel">
+      <div class="hp-row"><span>Bazza</span><div class="bar hp-bar"><i data-bind="hpBar"></i></div></div>
+      <div class="weapon-row"><b data-bind="weapon">L&amp;P Fizz Cannon</b> <small>[Q] swap</small></div>
+      <div class="pips"><span class="pip" data-bind="dashPip">DASH ⇧</span><span class="pip" data-bind="blowPip">BLOWER E</span><span class="pip" data-bind="mutePip">SOUND M</span></div>
+    </div>
+    <div class="hotbar" data-bind="hotbar"></div>
+    <div class="build-banner" data-bind="buildBanner">BUILD MODE · <b>LMB</b> place · <b>R</b> rotate · <b>X</b>/<b>RMB</b> sell · <b>B</b> exit</div>
+    <div class="control-hint" data-bind="controlHint">
+      <button class="x" data-act="dismissHint" aria-label="Dismiss">×</button>
+      <div class="mode" data-bind="modeLine"></div>
+      <div class="keys">WASD move · Space jump · Shift dash · LMB fire · RMB/E blower · Q swap · B build · 1–5 traps · R rotate · X sell · G send wave · P/Esc pause · Tab free cursor · M mute</div>
+    </div>
+    <div class="damage-edge" data-bind="damage"></div>
+    <div class="dead-msg" data-bind="deadMsg"></div>
+    <div class="floaters" data-bind="floaters"></div>
+  </div>
+
+  <section id="title" class="screen screen-title" hidden>
+    <div class="title-block">
+      <p class="kicker">A third-person trap-defence yarn</p>
+      <h1 class="game-title">{{TITLE}}</h1>
+      <p class="tagline">Seagulls, possums and one feral ride-on mower want the beers in the bach fridge.<br>Wet decking, flying jandals and a No. 8 wire gate say <i>yeah, nah</i>.</p>
+    </div>
+    <nav class="menu">
+      <button class="btn btn-primary" data-act="start">Let's Go, Bro</button>
+    </nav>
+    <p class="hint">Click the game to capture the mouse (or right-drag to orbit if your browser won't let it) · WASD · LMB fire · E leaf-blower · B build · 1–5 traps · G send the next wave</p>
+  </section>
+
+  <section id="pause" class="screen screen-pause" hidden>
+    <h2 class="screen-heading">Smoko</h2>
+    <p class="sub">Game paused — the pests are also on a tea break.</p>
+    <nav class="menu">
+      <button class="btn btn-primary" data-act="resume">Back Into It</button>
+      <button class="btn" data-act="restart">Restart (Backspace)</button>
+      <button class="btn" data-act="mute">Toggle Sound (M)</button>
+      <button class="btn" data-act="mode">Switch to <span data-bind="otherMode">drag-orbit</span> controls</button>
+    </nav>
+  </section>
+
+  <section id="over" class="screen screen-over" hidden>
+    <h2 class="screen-heading" data-bind="overTitle"></h2>
+    <p class="sub" data-bind="overSub"></p>
+    <div class="stats" data-bind="overStats"></div>
+    <nav class="menu"><button class="btn btn-primary" data-act="restart">Go Again (Enter)</button></nav>
+  </section>
+</div>
+
+<div id="boot" class="ui boot"><div class="boot-title">{{TITLE}}</div><div class="boot-msg">Firing up the barbie…</div></div>
+<noscript><p class="noscript">This game needs JavaScript and WebGL.</p></noscript>
+<script>/*SCRIPT*/</script>
+</body>
+</html>
