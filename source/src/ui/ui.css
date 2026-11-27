@@ -63,8 +63,8 @@ button { font-family: inherit; }
 .pip { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(77, 255, 122, .25); border: 1px solid rgba(77, 255, 122, .5); }
 .pip.cd { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .15); opacity: .55; }
 .pip.off { background: rgba(255, 75, 62, .25); border-color: rgba(255, 75, 62, .5); }
-.hotbar { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
-.slot { width: 104px; padding: 7px 8px 6px; border-radius: 10px; background: var(--panel); border: 2px solid var(--edge); text-align: center; position: relative; pointer-events: auto; cursor: pointer; }
+.hotbar { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+.slot { width: 84px; padding: 7px 8px 6px; border-radius: 10px; background: var(--panel); border: 2px solid var(--edge); text-align: center; position: relative; pointer-events: auto; cursor: pointer; }
 .slot .k { position: absolute; top: 3px; left: 6px; font-weight: 900; font-size: 12px; opacity: .8; }
 .slot .sw { width: 22px; height: 22px; border-radius: 50%; margin: 0 auto 3px; border: 2px solid rgba(255, 255, 255, .6); }
 .slot .n { font-size: 12px; font-weight: 700; line-height: 1.1; min-height: 26px; display: grid; place-items: center; }
@@ -100,7 +100,7 @@ button { font-family: inherit; }
 .toasts { position: absolute; top: 140px; left: 14px; display: grid; gap: 4px; max-width: 360px; }
 .toast { background: rgba(0, 0, 0, .55); padding: 4px 10px; border-radius: 6px; font-size: 13px; animation: fade 3.2s forwards; }
 .toast.deny { color: #ffb0a4; }
-.control-hint { position: absolute; right: 14px; bottom: 14px; max-width: 330px; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px;
+.control-hint { position: absolute; right: 14px; top: 118px; max-width: 300px; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px;
   padding: 10px 28px 10px 12px; font-size: 12px; pointer-events: auto; }
 .control-hint .mode { font-weight: 800; font-size: 14px; color: var(--accent); margin-bottom: 4px; }
 .control-hint .keys { opacity: .85; line-height: 1.45; }
@@ -113,4 +113,5 @@ button { font-family: inherit; }
 .fl { position: absolute; left: 0; top: 0; font-weight: 900; font-size: 15px; color: #fff; text-shadow: 0 2px 0 #000, 0 0 4px #000; white-space: nowrap; will-change: transform; }
 .fl.crit { color: #ffd21f; font-size: 21px; } .fl.money { color: #ffd21f; } .fl.trap { color: #7fe3ff; } .fl.yeet { color: #ff9a3c; font-size: 22px; }
 .noscript { position: fixed; inset: 0; display: grid; place-content: center; }
-@media (max-width: 900px) { .hotbar .slot { width: 76px; } .slot .m { display: none; } .control-hint { display: none; } .callout { font-size: 44px; } }
+@media (max-width: 1150px) { .hotbar .slot { width: 70px; } .slot .n { font-size: 11px; } .player-panel { min-width: 200px; } }
+@media (max-width: 900px) { .hotbar .slot { width: 62px; } .slot .m { display: none; } .control-hint { display: none; } .callout { font-size: 44px; } }

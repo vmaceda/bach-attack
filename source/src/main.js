@@ -8,6 +8,7 @@ import { Raycaster, Vector2, Vector3 } from 'three';
 import { createSim, blankCmd } from './sim/index.js';
 import { createFixedStep } from './sim/loop.js';
 import { createScene } from './render/scene.js';
+import { createPost } from './render/post.js';
 import { createFX } from './render/fx.js';
 import { createView } from './render/view.js';
 import { createInput } from './input.js';
@@ -25,6 +26,7 @@ try { gfx = createScene(canvas); } catch (err) {
   throw err;
 }
 const { renderer, scene, camera } = gfx;
+const post = createPost(renderer, scene, camera, params);
 const sim = createSim({ seed: +(params.get('seed') || SEED) });
 const fx = createFX(scene);
 const audio = createAudio();
@@ -77,7 +79,7 @@ function restart() {
   audio.init();
   setState('playing');
   input.requestLock();
-  hud.banner('BUILD YOUR DEFENCES', 'Press B or 1–5 to place traps · G to send the first wave', '#ffd21f');
+  hud.banner('BUILD YOUR DEFENCES', 'Press B or 1–8 to place traps · G to send the first wave', '#ffd21f');
 }
 
 input.onLockLost = (byTab) => { if (!byTab && state === 'playing') pause(); };
@@ -97,6 +99,7 @@ uiRoot.addEventListener('click', (e) => {
   else if (a === 'resume') resume();
   else if (a === 'restart') restart();
   else if (a === 'mute') audio.init(), audio.toggleMute();
+  else if (a === 'music') audio.init(), audio.toggleMusic();
   else if (a === 'mode') input.forceMode(input.mode === 'lock' ? 'drag' : 'lock');
   else if (a === 'dismissHint') hud.dismissHint();
 });
@@ -108,6 +111,7 @@ const camFwd = new Vector3();
 function handleKeys(inp) {
   const p = inp.pressed;
   if (p.has('KeyM')) { audio.init(); audio.toggleMute(); }
+  if (p.has('KeyN')) { audio.init(); hud.toast(audio.toggleMusic() ? 'Music on — chur' : 'Music off'); }
   if (p.has('Backspace') && state !== 'title') { restart(); return; }
   if (state === 'over') { if (p.has('Enter') || p.has('NumpadEnter')) restart(); return; }
   if (state === 'paused') { if (p.has('KeyP') || p.has('Escape')) resume(); return; }
@@ -162,6 +166,8 @@ function frame(dt) {
   } else cmd.aimYaw = ctl.yaw;
 
   if (state === 'playing') fixed.advance(dt);
+  audio.setIntensity(S.phase === 'wave');
+  audio.duck(state !== 'playing');
   place = ctl.build && state !== 'title' ? sim.queryPlacement(cmd.rayO, cmd.rayD, ctl.trap, ctl.rot) : null;
 
   const events = sim.drainEvents();
@@ -182,7 +188,8 @@ function frame(dt) {
       mode: input.mode, locked: input.locked, muted: audio.muted, project,
     });
   }
-  renderer.render(scene, camera);
+  post.update(dt);
+  post.render();
 }
 
 const pv = new Vector3();

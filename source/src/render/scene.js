@@ -1,76 +1,87 @@
 // Renderer, lighting, sky and the static level. Level meshes are generated from contracts.BOXES (the collision
 // boxes), then dressed with purely visual set pieces (gable roof, roller doors, fridge, ute, clothesline, trees, sea).
 import {
-  WebGLRenderer, Scene, PerspectiveCamera, HemisphereLight, DirectionalLight, PointLight, Fog, Color, Mesh, Group,
-  BoxGeometry, CylinderGeometry, SphereGeometry, ConeGeometry, PlaneGeometry, TorusGeometry, CircleGeometry,
-  MeshStandardMaterial, MeshBasicMaterial, ShaderMaterial, BackSide, DoubleSide, ACESFilmicToneMapping, SRGBColorSpace,
-  PCFSoftShadowMap, Vector3, Shape, ExtrudeGeometry, BufferGeometry, Float32BufferAttribute, LineSegments, LineBasicMaterial,
+  WebGLRenderer, Scene, PerspectiveCamera, HemisphereLight, DirectionalLight, PointLight, FogExp2, Color, Mesh, Group,
+  BoxGeometry, CylinderGeometry, SphereGeometry, ConeGeometry, PlaneGeometry, TorusGeometry, CircleGeometry, IcosahedronGeometry,
+  MeshStandardMaterial, MeshPhysicalMaterial, MeshBasicMaterial, DoubleSide, AgXToneMapping, SRGBColorSpace,
+  PCFSoftShadowMap, Vector3, Shape, ExtrudeGeometry, PMREMGenerator, InstancedMesh, Object3D, BufferGeometry, Float32BufferAttribute,
 } from 'three';
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
+import { Water } from 'three/examples/jsm/objects/Water.js';
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BOXES, PATHS, DOORS, GOAL, CAMERA } from '../contracts.js';
-import { TEX } from './textures.js';
+import { TEX, pbr } from './textures.js';
 import { heightAt } from '../sim/world.js';
 
 const std = (o) => new MeshStandardMaterial(o);
-const tiled = (tex, scale, o = {}) => { const m = std({ map: tex, roughness: 0.9, ...o }); m.userData.uvScale = scale; return m; };
+// tiled PBR material: albedo + generated normal/roughness maps, world-space UVs (scale = metres per tile)
+const tiled = (tex, scale, o = {}, p = {}) => {
+  const { normalMap, roughnessMap } = pbr(tex, p);
+  const m = std({ map: tex, normalMap, roughnessMap, roughness: 1, ...o });
+  m.normalScale.set(p.ns ?? 1, p.ns ?? 1);
+  m.userData.uvScale = scale; return m;
+};
+
+export const SUN_DIR = new Vector3(0.52, 0.72, 0.46).normalize();
 
 export function createScene(canvas) {
-  const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  const renderer = new WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
+  renderer.toneMapping = AgXToneMapping;      // filmic highlight roll-off (applied by the post OutputPass)
+  renderer.toneMappingExposure = 0.95;
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
   const scene = new Scene();
-  const skyCol = new Color('#9fd3f5');
-  scene.background = skyCol;
-  scene.fog = new Fog(new Color('#bfe0f2'), 70, 260);
-  const camera = new PerspectiveCamera(CAMERA.fov, 16 / 9, 0.1, 900);
+  const camera = new PerspectiveCamera(CAMERA.fov, 16 / 9, 0.1, 2000);
+
+  // ---- physical sky (Preetham) — also baked into a PMREM environment so every PBR surface picks up sky light and
+  //      reflections that match the sun
+  const sky = new Sky();
+  sky.scale.setScalar(1800);
+  const su = sky.material.uniforms;
+  su.turbidity.value = 2.2; su.rayleigh.value = 2.6; su.mieCoefficient.value = 0.003; su.mieDirectionalG.value = 0.86;
+  su.sunPosition.value.copy(SUN_DIR).multiplyScalar(1000);
+  scene.add(sky);
+  const pmrem = new PMREMGenerator(renderer);
+  const envScene = new Scene();
+  const envSky = new Sky(); envSky.scale.setScalar(1000); envScene.add(envSky);
+  Object.assign(envSky.material.uniforms, { turbidity: { value: 2.2 }, rayleigh: { value: 2.6 }, mieCoefficient: { value: 0.003 }, mieDirectionalG: { value: 0.86 } });
+  envSky.material.uniforms.sunPosition.value.copy(SUN_DIR).multiplyScalar(1000);
+  const groundDisc = new Mesh(new CircleGeometry(900, 16), new MeshBasicMaterial({ color: '#3d5a26' })); groundDisc.rotation.x = -Math.PI / 2; groundDisc.position.y = -2; envScene.add(groundDisc);
+  scene.environment = pmrem.fromScene(envScene, 0.02).texture;
+  scene.environmentIntensity = 0.85;
+  scene.fog = new FogExp2(new Color('#a9c9e2'), 0.0016);
 
   // ---- light: a sunny Kiwi summer arvo
-  const hemi = new HemisphereLight('#cfe8ff', '#5c7a3a', 1.15);
+  const hemi = new HemisphereLight('#cfe4ff', '#4a5e30', 0.35);
   scene.add(hemi);
-  const sun = new DirectionalLight('#fff1d6', 2.9);
-  sun.position.set(28, 46, 18);
-  sun.target.position.set(1, 0, -1);
+  const sun = new DirectionalLight('#fff0d8', 3.6);
+  sun.position.copy(SUN_DIR).multiplyScalar(70).add(new Vector3(2, 0, 0));
+  sun.target.position.set(2, 0, 0);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(4096, 4096);
   const sc = sun.shadow.camera;
-  sc.left = -42; sc.right = 42; sc.top = 42; sc.bottom = -42; sc.near = 5; sc.far = 130;
-  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+  sc.left = -40; sc.right = 40; sc.top = 40; sc.bottom = -40; sc.near = 10; sc.far = 160;
+  sun.shadow.bias = -0.00025; sun.shadow.normalBias = 0.025; sun.shadow.radius = 3;
   scene.add(sun, sun.target);
-
-  // ---- sky dome with sun glow
-  const skyMat = new ShaderMaterial({
-    side: BackSide, depthWrite: false, fog: false,
-    uniforms: { sunDir: { value: new Vector3(28, 46, 18).normalize() } },
-    vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: `varying vec3 vP; uniform vec3 sunDir;
-      void main(){ float h = clamp(vP.y, -0.2, 1.0);
-        vec3 top = vec3(0.24,0.52,0.86), hor = vec3(0.78,0.89,0.96);
-        vec3 c = mix(hor, top, pow(max(h,0.0), 0.55));
-        float s = max(dot(normalize(vP), sunDir), 0.0);
-        c += vec3(1.0,0.9,0.7) * (pow(s, 600.0) * 4.0 + pow(s, 12.0) * 0.25);
-        gl_FragColor = vec4(c, 1.0); }`,
-  });
-  const sky = new Mesh(new SphereGeometry(600, 32, 16), skyMat);
-  sky.renderOrder = -1;
-  scene.add(sky);
 
   // ---- materials
   const M = {
-    grass: tiled(TEX.grass(), 4), dirt: tiled(TEX.dirt(), 3), compost: tiled(TEX.compost(), 3),
-    planks: tiled(TEX.planks(), 2.4, { roughness: 0.8 }), planksDark: tiled(TEX.planks(), 2.4, { color: '#a08870' }),
-    wbCream: tiled(TEX.weatherboard('#efe4bd'), 2), wbBlue: tiled(TEX.weatherboard('#a9cfd2'), 2),
-    corrGarage: tiled(TEX.corrugated('#7f9a8c'), 2, { metalness: 0.35, roughness: 0.55 }),
-    corrShed: tiled(TEX.corrugated('#5f7f55'), 2, { metalness: 0.3, roughness: 0.6 }),
-    corrRoof: tiled(TEX.corrugated('#b5452e'), 2, { metalness: 0.3, roughness: 0.55 }),
-    corrZinc: tiled(TEX.corrugated('#c4cac6'), 2, { metalness: 0.5, roughness: 0.45 }),
-    palings: tiled(TEX.palings(), 2.5), hedge: tiled(TEX.hedge(), 3), brick: tiled(TEX.brick(), 2),
-    white: std({ color: '#f3f3ef', roughness: 0.35 }), black: std({ color: '#1b1b1b', roughness: 0.6 }),
-    dark: std({ color: '#151210', roughness: 1 }), glass: std({ color: '#9fd6ee', roughness: 0.08, metalness: 0.1, emissive: '#1a3a48' }),
-    frame: std({ color: '#f7f7f2', roughness: 0.5 }), steel: std({ color: '#b9c2c7', metalness: 0.8, roughness: 0.35 }),
+    grass: tiled(TEX.grass(), 3, {}, { strength: 1.2, rough: [0.8, 1] }), dirt: tiled(TEX.dirt(), 3, {}, { strength: 3 }),
+    compost: tiled(TEX.compost(), 3, {}, { strength: 4, rough: [0.5, 0.95] }),
+    planks: tiled(TEX.planks(), 2.4, {}, { strength: 3, rough: [0.45, 0.9] }), planksDark: tiled(TEX.planks(), 2.4, { color: '#a08870' }, { strength: 3, rough: [0.5, 0.9] }),
+    wbCream: tiled(TEX.weatherboard('#efe4bd'), 2, {}, { strength: 5, rough: [0.45, 0.75] }), wbBlue: tiled(TEX.weatherboard('#a9cfd2'), 2, {}, { strength: 5, rough: [0.45, 0.75] }),
+    corrGarage: tiled(TEX.corrugated('#7f9a8c'), 2, { metalness: 0.6 }, { strength: 3, rough: [0.3, 0.7] }),
+    corrShed: tiled(TEX.corrugated('#5f7f55'), 2, { metalness: 0.5 }, { strength: 3, rough: [0.35, 0.75] }),
+    corrRoof: tiled(TEX.corrugated('#b5452e'), 2, { metalness: 0.45 }, { strength: 3, rough: [0.3, 0.7] }),
+    corrZinc: tiled(TEX.corrugated('#c4cac6'), 2, { metalness: 0.85 }, { strength: 3, rough: [0.2, 0.55] }),
+    palings: tiled(TEX.palings(), 2.5, {}, { strength: 4 }), hedge: tiled(TEX.hedge(), 3, {}, { strength: 6, rough: [0.6, 0.95] }),
+    brick: tiled(TEX.brick(), 2, {}, { strength: 5, invert: true, rough: [0.7, 0.95] }),
+    white: std({ color: '#f3f3ef', roughness: 0.25 }), black: std({ color: '#1b1b1b', roughness: 0.6 }),
+    dark: std({ color: '#151210', roughness: 1 }), glass: new MeshPhysicalMaterial({ color: '#cfe8f2', roughness: 0.03, metalness: 0, transmission: 0, reflectivity: 0.9, clearcoat: 1, envMapIntensity: 1.6 }),
+    frame: std({ color: '#f7f7f2', roughness: 0.45 }), steel: std({ color: '#b9c2c7', metalness: 0.9, roughness: 0.28 }),
   };
   const LOOK = {
     grass: [M.dirt, M.dirt, M.grass, M.dirt, M.dirt, M.dirt], compost: M.compost,
@@ -238,40 +249,123 @@ export function createScene(canvas) {
     }
   };
   for (const [x, z] of [[-12, -15], [-12, 22], [-6.5, 28.5], [15.5, -29], [-12, -29.5], [5, 28.6]]) flax(x, z, 1.1);
-  const trunk = std({ color: '#5a4636', roughness: 1 }), crownG = std({ color: '#2f5d28', roughness: 0.9 }), crownR = std({ color: '#c8242e', roughness: 0.8 });
+  // organic shapes: jittered icosphere "blobs" (tree crowns, hills) with leaf/grass PBR maps
+  const leafTex = TEX.hedge(), leafPbr = pbr(leafTex, { strength: 6, rough: [0.55, 0.9] });
+  const leafMat = (color) => std({ color, map: leafTex, normalMap: leafPbr.normalMap, roughnessMap: leafPbr.roughnessMap, roughness: 1 });
+  const hash = (x, y, z) => { const h = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return h - Math.floor(h); };
+  const blobGeo = (detail, amp, seed) => {
+    let g = new IcosahedronGeometry(1, detail); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g); // smooth, shared verts
+    const p = g.attributes.position, uv = new Float32Array(p.count * 2);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const n = 1 + amp * (hash(Math.round(x * 3) + seed, Math.round(y * 3), Math.round(z * 3)) - 0.5) + amp * 0.5 * (hash(x * 9 + seed, y * 9, z * 9) - 0.5);
+      p.setXYZ(i, x * n, y * n, z * n);
+      uv[i * 2] = (Math.atan2(z, x) / 6.283 + 0.5) * 4; uv[i * 2 + 1] = y * 2;
+    }
+    g.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    return g;
+  };
+  const crownGeos = [blobGeo(3, 0.35, 1), blobGeo(3, 0.35, 7), blobGeo(3, 0.4, 13)];
+  const trunkTex = TEX.dirt(), trunkPbr = pbr(trunkTex, { strength: 5 });
+  const trunk = std({ color: '#7a6250', map: trunkTex, normalMap: trunkPbr.normalMap, roughness: 1 });
+  const crownG = leafMat('#7fbf5a'), crownG2 = leafMat('#9ccf6a'), crownR = std({ color: '#ff2a3a', roughness: 0.7, emissive: '#5a0008', emissiveIntensity: 0.4 });
   const pohutukawa = (x, z, s) => {
     const g = new Group(); g.position.set(x, 0, z); g.scale.setScalar(s); level.add(g);
-    add(new CylinderGeometry(0.35, 0.6, 3.2, 8), trunk, 0, 1.6, 0, { parent: g });
-    for (let i = 0; i < 7; i++) {
-      const a = i * 0.9, r = i ? 1.9 : 0;
-      add(new SphereGeometry(1.7 - (i ? 0.3 : 0), 10, 8), i % 2 ? crownR : crownG, Math.cos(a) * r, 3.8 + (i % 3) * 0.4, Math.sin(a) * r, { parent: g });
+    for (let k = 0; k < 3; k++) { const m = add(new CylinderGeometry(0.18, 0.4, 3.6, 8), trunk, Math.cos(k * 2.1) * 0.5, 1.6, Math.sin(k * 2.1) * 0.5, { parent: g }); m.rotation.set(Math.sin(k * 2.1) * 0.3, 0, -Math.cos(k * 2.1) * 0.3); }
+    for (let i = 0; i < 14; i++) {
+      const a = i * 2.39, r = i < 2 ? 0.3 : 1.2 + (i % 4) * 0.45, sz = 1.25 - (i % 3) * 0.15;
+      const m = add(crownGeos[i % 3], i % 3 === 0 ? crownG2 : crownG, Math.cos(a) * r, 3.7 + (i % 5) * 0.32 + (i < 2 ? 0.7 : 0), Math.sin(a) * r, { parent: g });
+      m.scale.set(sz, sz * 0.75, sz);
+      // pohutukawa in flower: crimson clusters sitting on the outer canopy
+      if (i >= 2) { const f = add(crownGeos[(i + 1) % 3], crownR, Math.cos(a) * (r + 0.7), 4.1 + (i % 5) * 0.32, Math.sin(a) * (r + 0.7), { parent: g, cast: false }); f.scale.setScalar(0.45 + (i % 2) * 0.15); }
     }
   };
   const cabbage = (x, z, s) => {
     const g = new Group(); g.position.set(x, 0, z); g.scale.setScalar(s); level.add(g);
-    add(new CylinderGeometry(0.12, 0.2, 4, 6), trunk, 0, 2, 0, { parent: g });
-    for (let i = 0; i < 14; i++) {
-      const m = add(new ConeGeometry(0.06, 1.3, 4), crownG, 0, 4.1, 0, { parent: g });
-      m.rotation.set(Math.cos(i * 2.4) * 1.1, i * 2.4, Math.sin(i * 2.4) * 1.1);
+    add(new CylinderGeometry(0.12, 0.22, 4, 8), trunk, 0, 2, 0, { parent: g });
+    for (let i = 0; i < 26; i++) {
+      const m = add(new ConeGeometry(0.05, 1.3, 4), crownG, 0, 4.1, 0, { parent: g });
+      m.rotation.set(Math.cos(i * 2.4) * (0.6 + (i % 3) * 0.4), i * 2.4, Math.sin(i * 2.4) * (0.6 + (i % 3) * 0.4));
     }
   };
   for (const [x, z, s] of [[-20, -10, 1.4], [-21, 14, 1.6], [-19, 30, 1.3], [24, -20, 1.5], [25, 8, 1.7], [23, 32, 1.4], [-6, 37, 1.5], [9, 38, 1.3]]) pohutukawa(x, z, s);
   for (const [x, z, s] of [[-17, -26, 1], [21, -32, 1.1], [-17, 3, 0.9], [21, 20, 1]]) cabbage(x, z, s);
-  const hillMat = std({ color: '#5d8c3c', roughness: 1 }), hillMat2 = std({ color: '#4b7a33', roughness: 1 });
+
+  // rolling farmland: big jittered hills + paddocks wearing the same grass PBR set, repeated
+  const farGrass = (rep) => { const t = TEX.grass().clone(); t.repeat.set(rep, rep); t.needsUpdate = true; const p2 = pbr(TEX.grass(), { strength: 1.2, rough: [0.8, 1] }); const n = p2.normalMap.clone(); n.repeat.set(rep, rep); n.needsUpdate = true; return std({ map: t, normalMap: n, roughness: 1, color: '#d8e8c8' }); };
+  const hillGeo = blobGeo(4, 0.12, 3);
+  const hillMat = farGrass(40);
   for (const [x, z, r, h] of [[-90, 40, 60, 28], [-40, 110, 70, 34], [60, 120, 80, 40], [120, 30, 60, 26], [-140, -20, 70, 30], [150, -40, 50, 20]]) {
-    const m = add(new SphereGeometry(1, 24, 12), (x + z) % 3 ? hillMat : hillMat2, x, -3, z, { cast: false });
-    m.scale.set(r, h, r);
+    const m = add(hillGeo, hillMat, x, -3, z, { cast: false }); m.scale.set(r, h, r); m.rotation.y = x;
   }
-  const sea = add(new PlaneGeometry(1400, 600), std({ color: '#2a7fb8', roughness: 0.15, metalness: 0.2 }), 0, -1.5, -340, { rx: -Math.PI / 2, cast: false });
-  add(new PlaneGeometry(1400, 60), std({ color: '#e9d7a8', roughness: 1 }), 0, -1.2, -55, { rx: -Math.PI / 2, cast: false });
-  add(new PlaneGeometry(500, 500), std({ color: '#5f9a3a', roughness: 1 }), 0, -0.05, 283, { rx: -Math.PI / 2, cast: false });
-  for (const [x, z, w, d] of [[-120, -10, 200, 90], [140, -10, 220, 90]]) add(new PlaneGeometry(w, d), std({ color: '#5f9a3a', roughness: 1 }), x, -0.05, z, { rx: -Math.PI / 2, cast: false });
-  // a few lazy clouds
-  const cloudMat = std({ color: '#ffffff', roughness: 1, emissive: '#c8d8e8', emissiveIntensity: 0.5 });
+  // the Pacific: reflective animated water with a procedural normal map
+  const water = new Water(new PlaneGeometry(1600, 700), {
+    textureWidth: 512, textureHeight: 512, waterNormals: TEX.waterNormals(), sunDirection: SUN_DIR.clone(),
+    sunColor: 0xfff2dd, waterColor: 0x0e4a6e, distortionScale: 2.2, fog: true,
+  });
+  water.rotation.x = -Math.PI / 2; water.position.set(0, -1.5, -400); water.material.uniforms.size.value = 6;
+  scene.add(water);
+  const sandTex = TEX.grass().clone(); sandTex.repeat.set(200, 8); sandTex.needsUpdate = true;
+  add(new PlaneGeometry(1600, 60), std({ color: '#fff4d8', map: sandTex, roughness: 1 }), 0, -1.2, -55, { rx: -Math.PI / 2, cast: false });
+  // paddocks all round the section (leaving the arena itself to the level boxes)
+  for (const [x0, x1, z0, z1] of [[-500, -15, -25, 500], [19, 500, -25, 500], [-15, 19, 32, 500]]) {
+    const w = x1 - x0, d = z1 - z0;
+    add(new PlaneGeometry(w, d), farGrass(Math.max(w, d) / 4), (x0 + x1) / 2, -0.05, (z0 + z1) / 2, { rx: -Math.PI / 2, cast: false });
+  }
+  // a few lazy cumulus
+  const cloudMat = std({ color: '#ffffff', roughness: 1, emissive: '#dfe8f2', emissiveIntensity: 0.55, fog: false });
   const clouds = new Group(); scene.add(clouds);
-  for (let i = 0; i < 9; i++) {
-    const g = new Group(); g.position.set(-260 + i * 65, 70 + (i % 3) * 12, -120 - (i % 4) * 40); clouds.add(g);
-    for (let k = 0; k < 5; k++) { const m = new Mesh(new SphereGeometry(10 + (k % 2) * 4, 10, 8), cloudMat); m.position.set(k * 9 - 18, (k % 2) * 4, (k % 3) * 3); m.scale.y = 0.55; g.add(m); }
+  const cloudGeo = blobGeo(2, 0.3, 21);
+  for (let i = 0; i < 10; i++) {
+    const g = new Group(); g.position.set(-300 + i * 70, 85 + (i % 3) * 14, -160 - (i % 4) * 50); clouds.add(g);
+    for (let k = 0; k < 7; k++) { const m = new Mesh(cloudGeo, cloudMat); m.position.set(k * 8 - 24, (k % 2) * 5 + (k === 3 ? 6 : 0), (k % 3) * 4); m.scale.set(11 + (k % 3) * 3, 7 + (k % 2) * 3, 10); g.add(m); }
+  }
+
+  // ---- grass blades: ~30k instanced blades on the lawns, swaying in the sea breeze (vertex shader)
+  const grassUniforms = { uTime: { value: 0 } };
+  {
+    const blade = new BufferGeometry();
+    // 3-segment tapered blade, base at y=0
+    const v = [-0.03, 0, 0, 0.03, 0, 0, -0.022, 0.33, 0, 0.022, 0.33, 0, -0.012, 0.66, 0, 0.012, 0.66, 0, 0, 1, 0];
+    blade.setAttribute('position', new Float32BufferAttribute(v, 3));
+    blade.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4, 4, 5, 6]);
+    blade.computeVertexNormals();
+    const mat = std({ color: '#ffffff', roughness: 0.85, side: DoubleSide });
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uTime = grassUniforms.uTime;
+      sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 wp = instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+        float sway = sin(uTime * 1.7 + wp.x * 0.35 + wp.z * 0.21) * 0.6 + sin(uTime * 3.1 + wp.x * 1.3) * 0.25;
+        transformed.x += sway * 0.12 * position.y * position.y;
+        transformed.z += sway * 0.06 * position.y * position.y;`);
+      sh.vertexShader = sh.vertexShader.replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n objectNormal = vec3(0.0, 1.0, 0.0);'); // lit like the lawn it grows from
+    };
+    const N = 30000, mesh = new InstancedMesh(blade, mat, N);
+    const o = new Object3D(), col = new Color();
+    const lawn = BOXES.filter((b) => b.look === 'grass' && b.max[1] === 0);
+    let n = 0, guard = 0;
+    while (n < N && guard++ < N * 4) {
+      const b = lawn[Math.floor(Math.random() * lawn.length)];
+      const x = b.min[0] + Math.random() * (b.max[0] - b.min[0]), z = b.min[2] + Math.random() * (b.max[2] - b.min[2]);
+      if (heightAt(x, z, 0.5, 0) !== 0) continue; // under the deck / porch / props
+      let block = false;
+      for (const bb of BOXES) if (bb.kind !== 'ground' && bb.min[1] < 0.5 && x > bb.min[0] - 0.05 && x < bb.max[0] + 0.05 && z > bb.min[2] - 0.05 && z < bb.max[2] + 0.05) { block = true; break; }
+      if (block) continue;
+      // the enemy lane is trampled flat (and keeps floor traps readable)
+      let lane = Math.abs(x + 1.5) < 3.2 && z > -16 && z < 24;
+      if (z < -14 && (Math.abs(x + 7) < 2.4 || Math.abs(x - 7) < 2.4)) lane = true;
+      if (lane && Math.random() < 0.85) continue;
+      const hgt = (lane ? 0.08 : 0.16) + Math.random() * (lane ? 0.06 : 0.22);
+      o.position.set(x, 0, z); o.rotation.set((Math.random() - 0.5) * 0.4, Math.random() * Math.PI, (Math.random() - 0.5) * 0.4);
+      o.scale.set(1 + Math.random(), hgt, 1); o.updateMatrix();
+      mesh.setMatrixAt(n, o.matrix);
+      col.setHSL(0.22 + Math.random() * 0.06, 0.45 + Math.random() * 0.2, 0.22 + Math.random() * 0.14);
+      mesh.setColorAt(n, col);
+      n++;
+    }
+    mesh.count = n; mesh.receiveShadow = true; mesh.castShadow = false; mesh.frustumCulled = false;
+    level.add(mesh);
   }
 
   // ---- lane guide chevrons (shown in build phase so the route reads at a glance)
@@ -303,7 +397,9 @@ export function createScene(canvas) {
   let t = 0;
   function update(dt, S) {
     t += dt;
-    clouds.position.x = (t * 1.2) % 120;
+    clouds.position.x = (t * 1.2) % 140;
+    grassUniforms.uTime.value = t;
+    water.material.uniforms.time.value = t * 0.35;
     if (level.userData.clothesline) level.userData.clothesline.rotation.y += dt * 0.25;
     lanes.visible = S.phase === 'build';
     if (lanes.visible) laneMat.opacity = 0.35 + 0.25 * Math.sin(t * 4);
@@ -315,7 +411,7 @@ export function createScene(canvas) {
     fridgeGlow.emissiveIntensity = 0.6 + 1.4 * f;
   }
 
-  return { renderer, scene, camera, sun, level, update, resize, fridge };
+  return { renderer, scene, camera, sun, level, update, resize, fridge, water };
 }
 
 // box geometry whose UVs are world-space, so tiled textures line up across neighbouring boxes

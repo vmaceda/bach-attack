@@ -99,22 +99,29 @@ export const WEAPONS = {
 };
 export const BLOWER = { name: 'Leaf-Blower', cd: 0.75, range: 7.5, cosHalf: Math.cos((38 * Math.PI) / 180), push: 15, lift: 4.5, dmg: 3 };
 
-// ---------------------------------------------------------------- traps (hotkeys 1-5)
+// ---------------------------------------------------------------- traps (hotkeys 1-8)
 // mount: floor | wall | ceil. dirs: how many R-rotations the trap supports.
 export const TRAPS = [
   { id: 'wet', key: '1', name: 'Wet Decking', mount: 'floor', cost: 150, dirs: 4, color: '#5ad1ff',
     blurb: 'Freshly hosed. Pests skid sideways — R sets the skid.' },
   { id: 'jandal', key: '2', name: 'Flying Jandal', mount: 'wall', cost: 275, dirs: 3, color: '#3b7bff',
-    blurb: 'Spring-loaded giant jandal. Wall mount. Yeets.', cd: 2.0, push: 15, lift: 5.5, dmg: 12, reach: 3.6 },
+    blurb: 'Spring-loaded launcher fires a giant spinning jandal across the lane. Wall mount.', cd: 1.8, push: 15, lift: 5.5,
+    dmg: 16, reach: 3.6, speed: 19, range: 1.0 },
   { id: 'sizzle', key: '3', name: 'Sausage Sizzle', mount: 'floor', cost: 225, dirs: 1, color: '#ff7a2f',
     blurb: 'Steam warning, then a scorching burst. Bread not included.', cd: 3.4, warn: 0.7, dmg: 55, burn: 10, burnT: 3 },
   { id: 'marmite', key: '4', name: 'Marmite Floor', mount: 'floor', cost: 100, dirs: 1, color: '#5a3416',
     blurb: 'You either love it or you\'re stuck in it. Heavy slow.', slow: 0.28, linger: 0.8 },
   { id: 'gate', key: '5', name: 'No. 8 Wire Gate', mount: 'ceil', cost: 375, dirs: 1, color: '#c9d2d8',
     blurb: 'Farm gate on a No. 8 wire hinge. Ceiling mount. Crush + stun.', cd: 5.5, delay: 0.22, dmg: 95, stun: 1.6 },
+  { id: 'catapult', key: '6', name: 'Chilly Bin Launcher', mount: 'floor', cost: 300, dirs: 4, color: '#2a7fd4',
+    blurb: 'Spring-loaded chilly bin lid. Pests go up. R picks where they come down.', cd: 3.0, delay: 0.12, push: 9, lift: 13, dmg: 10 },
+  { id: 'zapper', key: '7', name: 'Electric Fence', mount: 'wall', cost: 250, dirs: 1, color: '#ffe14a',
+    blurb: 'Hot-wired No. 8 wire. Zaps everything in front of it. Wall mount.', cd: 1.3, dmg: 18, stun: 0.5, reach: 4.2 },
+  { id: 'stomper', key: '8', name: 'Gumboot Stomper', mount: 'ceil', cost: 325, dirs: 1, color: '#2b2b2b',
+    blurb: 'A giant gumboot on a piston. Fast, angry stomping. Ceiling mount.', cd: 1.4, delay: 0.1, dmg: 42, stun: 0.6 },
 ];
 export const TRAP_BY_ID = Object.fromEntries(TRAPS.map((t) => [t.id, t]));
-export const TRAP_TAG = { wet: 'Slip', jandal: 'Jandal Yeet', sizzle: 'Sizzle', marmite: 'Marmite', gate: 'Gate Slam' };
+export const TRAP_TAG = { wet: 'Slip', jandal: 'Jandal Yeet', sizzle: 'Sizzle', marmite: 'Marmite', gate: 'Gate Slam', catapult: 'Chilly Bin Launch', zapper: 'Zap', stomper: 'Gumboot Stomp' };
 export const WEAPON_TAG = { fizz: 'Fizz', pie: 'Pie', blower: 'Leaf-Blow', pit: 'Compost', wall: 'Wall Bonk' };
 export const SELL_REFUND = 0.8;
 export const GRID = 2;

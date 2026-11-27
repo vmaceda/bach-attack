@@ -46,7 +46,7 @@ export function createSim({ seed = 4207 } = {}) {
         yaw: PLAYER_SPAWN.yaw, hp: PLAYER.hp, dead: false, respawnT: 0, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0,
         fireCd: 0, blowCd: 0, weapon: 'fizz', lastHurt: -99, faceAimT: 0, moving: 0, firedT: -9, blowT: -9,
       },
-      enemies: [], traps: [], shots: [], cones: [], pickups: [],
+      enemies: [], traps: [], shots: [], cones: [], pickups: [], flyers: [],
       spawnQ: [], spawned: 0, waveTotal: 0,
       combo: { streak: 0, streakT: 0, best: 0, links: 0 },
       stats: { kills: 0, yeets: 0, combos: 0, leaks: 0 },
@@ -84,7 +84,7 @@ export function createSim({ seed = 4207 } = {}) {
   function queryPlacement(o, d, ti, rot = 0) {
     const T = TRAPS[ti];
     const q = { ok: false, reason: '', mount: T.mount, type: T.id, x: 0, y: 0, z: 0, nx: 0, nz: 0, rot, key: '', cost: T.cost, sellId: 0, hit: false };
-    const h = raycast(o, d, 45, 0, {});
+    const h = raycast(o, d, 45, 0, {}, 'rail'); // build over the porch railing
     if (!h) { q.reason = T.mount === 'ceil' ? 'Aim up at the carport ceiling, bro' : T.mount === 'wall' ? 'Aim at a wall, bro' : 'Aim at the ground, bro'; return q; }
     q.hit = true; q.x = h.x; q.y = h.y; q.z = h.z;
     // existing trap under the reticle (for selling)
@@ -367,7 +367,7 @@ export function createSim({ seed = 4207 } = {}) {
     const D = ENEMIES[e.type];
     if (tr.mount === 'floor') return Math.abs(e.x - tr.x) < 1.05 + D.radius * 0.3 && Math.abs(e.z - tr.z) < 1.05 + D.radius * 0.3 && Math.abs(e.y - tr.y) < 0.45;
     if (tr.mount === 'wall') {
-      const T = TRAPS[1];
+      const T = TRAPS.find((t) => t.id === tr.type);
       const dx = e.x - tr.x, dz = e.z - tr.z;
       const d = dx * tr.wnx + dz * tr.wnz, s = -dx * tr.wnz + dz * tr.wnx;
       return d > -0.2 && d < T.reach + D.radius && Math.abs(s) < 1.3 + D.radius * 0.5 && e.y > tr.floor - 0.6 && e.y < tr.floor + 1.6;
@@ -407,10 +407,54 @@ export function createSim({ seed = 4207 } = {}) {
           }
         }
       } else if (tr.type === 'jandal') {
+        // the jandal actually flies: the trap launches a spinning jandal projectile across the lane (see stepFlyers)
         if (tr.cd <= 0 && now.size) {
           tr.cd = T.cd; tr.fired++;
           ev('trap', { act: 'fire', trap: tr });
-          for (const e of now) damage(e, T.dmg, 'jandal', { kx: tr.nx * T.push, kz: tr.nz * T.push, ky: T.lift });
+          // aim at the nearest pest in the zone (lead it a little), clamped to ±40° of the launcher's set direction
+          const ox = tr.x + tr.wnx * 0.35, oz = tr.z + tr.wnz * 0.35;
+          let tgt = null, td = 1e9;
+          for (const e of now) { const d = Math.hypot(e.x - ox, e.z - oz); if (d < td) { td = d; tgt = e; } }
+          let dx = tr.nx, dz = tr.nz;
+          if (tgt) {
+            const lead = td / T.speed;
+            let ax = tgt.x + tgt.vx * lead - ox, az = tgt.z + tgt.vz * lead - oz;
+            const l = Math.hypot(ax, az) || 1; ax /= l; az /= l;
+            const c = ax * tr.nx + az * tr.nz;
+            if (c > Math.cos(0.7)) { dx = ax; dz = az; }
+            else { const sg = Math.sign(tr.nx * az - tr.nz * ax) || 1, a = 0.7 * sg; dx = tr.nx * Math.cos(a) - tr.nz * Math.sin(a); dz = tr.nx * Math.sin(a) + tr.nz * Math.cos(a); }
+          }
+          S.flyers.push({
+            id: S.nextId++, x: ox, y: tr.floor + 0.85, z: oz,
+            vx: dx * T.speed, vy: 2.2, vz: dz * T.speed, dx, dz, life: T.range, hit: new Set(), trapType: 'jandal',
+          });
+        }
+      } else if (tr.type === 'zapper') {
+        if (tr.cd <= 0 && now.size) {
+          tr.cd = T.cd; tr.fired++;
+          const targets = [];
+          for (const e of now) { e.stunT = Math.max(e.stunT, T.stun); targets.push({ x: e.x, y: e.y + ENEMIES[e.type].height * 0.6, z: e.z }); damage(e, T.dmg, 'zapper'); }
+          ev('trap', { act: 'fire', trap: tr, targets });
+        }
+      } else if (tr.type === 'catapult') {
+        if (tr.phase === 'idle' && tr.cd <= 0 && now.size) { tr.phase = 'drop'; tr.pt = T.delay; ev('trap', { act: 'warn', trap: tr }); }
+        else if (tr.phase === 'drop') {
+          tr.pt -= h;
+          if (tr.pt <= 0) {
+            tr.phase = 'idle'; tr.cd = T.cd; tr.fired++;
+            ev('trap', { act: 'fire', trap: tr });
+            for (const e of now) { e.y += 0.05; damage(e, T.dmg, 'catapult', { kx: tr.nx * T.push, kz: tr.nz * T.push, ky: T.lift }); e.onGround = false; }
+          }
+        }
+      } else if (tr.type === 'stomper') {
+        if (tr.phase === 'idle' && tr.cd <= 0 && now.size) { tr.phase = 'drop'; tr.pt = T.delay; ev('trap', { act: 'warn', trap: tr }); }
+        else if (tr.phase === 'drop') {
+          tr.pt -= h;
+          if (tr.pt <= 0) {
+            tr.phase = 'idle'; tr.cd = T.cd; tr.fired++;
+            ev('trap', { act: 'fire', trap: tr });
+            for (const e of now) { e.stunT = Math.max(e.stunT, T.stun); damage(e, T.dmg, 'stomper', { ky: -2 }); }
+          }
         }
       } else if (tr.type === 'gate') {
         if (tr.phase === 'idle' && tr.cd <= 0 && now.size) { tr.phase = 'drop'; tr.pt = T.delay; ev('trap', { act: 'warn', trap: tr }); }
@@ -530,6 +574,27 @@ export function createSim({ seed = 4207 } = {}) {
     }
   }
 
+  // ------------------------------------------------------------------ flying jandals
+  function stepFlyers(h) {
+    for (const f of S.flyers) {
+      const T = TRAPS.find((t) => t.id === f.trapType);
+      f.life -= h;
+      f.vy -= 7 * h;
+      f.x += f.vx * h; f.y += f.vy * h; f.z += f.vz * h;
+      for (const e of S.enemies) {
+        if (e.dead || f.hit.has(e.id)) continue;
+        const D = ENEMIES[e.type];
+        if (Math.hypot(e.x - f.x, e.z - f.z) > D.radius + 0.75 || f.y < e.y - 0.4 || f.y > e.y + D.height + 0.5) continue;
+        f.hit.add(e.id);
+        damage(e, T.dmg, 'jandal', { kx: f.dx * T.push, kz: f.dz * T.push, ky: T.lift });
+        ev('jandalHit', { x: f.x, y: f.y, z: f.z });
+      }
+      const g = heightAt(f.x, f.z, f.y, 0);
+      if (f.life <= 0 || f.y <= g + 0.05 || solidAt(f.x, f.y, f.z)) { f.dead = true; ev('jandalLand', { x: f.x, y: Math.max(f.y, g), z: f.z }); }
+    }
+    S.flyers = S.flyers.filter((f) => !f.dead);
+  }
+
   // ------------------------------------------------------------------ projectiles / pickups
   function stepShots(h) {
     for (const s of S.shots) {
@@ -609,6 +674,7 @@ export function createSim({ seed = 4207 } = {}) {
     stepPlayer(h, cmd);
     stepTraps(h);
     stepEnemies(h);
+    stepFlyers(h);
     stepShots(h);
     S.enemies = S.enemies.filter((e) => !e.dead);
     if (S.combo.streakT > 0) { S.combo.streakT -= h; if (S.combo.streakT <= 0) S.combo.streak = 0; }

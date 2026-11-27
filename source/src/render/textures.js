@@ -1,5 +1,5 @@
 // Procedural canvas textures (generated at load — no image files, no data: blobs).
-import { CanvasTexture, RepeatWrapping, SRGBColorSpace, LinearMipmapLinearFilter } from 'three';
+import { CanvasTexture, RepeatWrapping, SRGBColorSpace, NoColorSpace, LinearMipmapLinearFilter } from 'three';
 
 let seed = 1337;
 const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -20,6 +20,46 @@ function make(name, size, draw, anisotropy = 8) {
   return t;
 }
 
+// PBR companions for a colour texture: a tangent-space normal map (Sobel of the luminance height field, wrapped so it
+// tiles) and a roughness map (crevices rougher, raised/polished bits smoother). o.invert flips the height (grooves
+// that are light in the albedo), o.height(x,y) overrides it with an analytic field (corrugated iron).
+const pbrCache = new Map();
+export function pbr(tex, o = {}) {
+  const key = tex.uuid + JSON.stringify(o, (k, v) => (typeof v === 'function' ? String(v) : v));
+  if (pbrCache.has(key)) return pbrCache.get(key);
+  const src = tex.image, w = src.width, h = src.height;
+  const px = src.getContext('2d').getImageData(0, 0, w, h).data;
+  const H = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    let v = (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114) / 255;
+    if (o.invert) v = 1 - v;
+    if (o.height) v = o.height(x / w, y / h, v);
+    H[y * w + x] = v;
+  }
+  const strength = o.strength ?? 2.5, [r0, r1] = o.rough ?? [0.55, 0.95];
+  const nc = document.createElement('canvas'), rc = document.createElement('canvas');
+  nc.width = rc.width = w; nc.height = rc.height = h;
+  const nctx = nc.getContext('2d'), rctx = rc.getContext('2d');
+  const nd = nctx.createImageData(w, h), rd = rctx.createImageData(w, h);
+  const at = (x, y) => H[((y + h) % h) * w + ((x + w) % w)];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+    const dy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1)) - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+    let nx = -dx * strength, ny = dy * strength, nz = 1;
+    const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const i = (y * w + x) * 4;
+    nd.data[i] = (nx * 0.5 + 0.5) * 255; nd.data[i + 1] = (ny * 0.5 + 0.5) * 255; nd.data[i + 2] = (nz * 0.5 + 0.5) * 255; nd.data[i + 3] = 255;
+    const r = (r1 - (r1 - r0) * at(x, y)) * 255;
+    rd.data[i] = rd.data[i + 1] = rd.data[i + 2] = r; rd.data[i + 3] = 255;
+  }
+  nctx.putImageData(nd, 0, 0); rctx.putImageData(rd, 0, 0);
+  const mk = (c) => { const t = new CanvasTexture(c); t.wrapS = t.wrapT = RepeatWrapping; t.colorSpace = NoColorSpace; t.minFilter = LinearMipmapLinearFilter; t.anisotropy = 8; return t; };
+  const out = { normalMap: mk(nc), roughnessMap: mk(rc) };
+  pbrCache.set(key, out);
+  return out;
+}
+
 const speckle = (g, s, n, cols, rmin, rmax, a = 1) => {
   g.globalAlpha = a;
   for (let i = 0; i < n; i++) {
@@ -31,6 +71,21 @@ const speckle = (g, s, n, cols, rmin, rmax, a = 1) => {
 };
 
 export const TEX = {
+  waterNormals: () => {
+    if (cache.has('waterN')) return cache.get('waterN');
+    const n = 256, c = document.createElement('canvas'); c.width = c.height = n;
+    const g = c.getContext('2d'), d = g.createImageData(n, n);
+    const waves = []; for (let i = 0; i < 24; i++) waves.push([Math.floor(1 + rnd() * 9) * (rnd() < 0.5 ? -1 : 1), Math.floor(1 + rnd() * 9) * (rnd() < 0.5 ? -1 : 1), rnd() * 6.28, 0.3 + rnd()]);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      let hx = 0, hy = 0;
+      for (const [kx, ky, ph, a] of waves) { const p = (kx * x + ky * y) / n * 6.2832 + ph, cs = Math.cos(p) * a / Math.hypot(kx, ky); hx += cs * kx; hy += cs * ky; }
+      let nx = -hx * 0.08, ny = -hy * 0.08, nz = 1; const l = Math.hypot(nx, ny, nz);
+      const i = (y * n + x) * 4; d.data[i] = (nx / l * 0.5 + 0.5) * 255; d.data[i + 1] = (ny / l * 0.5 + 0.5) * 255; d.data[i + 2] = (nz / l * 0.5 + 0.5) * 255; d.data[i + 3] = 255;
+    }
+    g.putImageData(d, 0, 0);
+    const t = new CanvasTexture(c); t.wrapS = t.wrapT = RepeatWrapping; t.colorSpace = NoColorSpace;
+    cache.set('waterN', t); return t;
+  },
   grass: () => make('grass', 256, (g, s) => {
     g.fillStyle = '#5f9a3a'; g.fillRect(0, 0, s, s);
     speckle(g, s, 2600, ['#6fae43', '#4f8a30', '#7dbb4c', '#578f35', '#8cc35a'], 1, 3);

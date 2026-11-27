@@ -1,7 +1,7 @@
 // View: mirrors sim.state into three.js objects every frame, runs the third-person camera rig (sphere-swept so walls
 // and beams push it in), and turns sim events into particles, sounds and HUD pops. Never mutates the sim.
-import { Vector3, Mesh, PlaneGeometry, BoxGeometry, MeshBasicMaterial, Group, ConeGeometry } from 'three';
-import { makePlayer, ENEMY_MODEL, makeHealthBar, makeTrap, makeGhost } from './models.js';
+import { Vector3, Mesh, PlaneGeometry, BoxGeometry, MeshBasicMaterial, Group, ConeGeometry, BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, AdditiveBlending } from 'three';
+import { makePlayer, ENEMY_MODEL, makeHealthBar, makeTrap, makeGhost, makeFlyingJandal } from './models.js';
 import { CAMERA, ENEMIES, TRAPS, TRAP_BY_ID, GOAL } from '../contracts.js';
 import { sweepSphere } from '../sim/world.js';
 
@@ -26,6 +26,25 @@ export function createView({ scene, camera, fx, audio, hud }) {
   const ghostZone = new Mesh(new PlaneGeometry(1, 1), ghostZoneMat);
   ghostZone.rotation.x = -Math.PI / 2; ghostZone.renderOrder = 4; ghostZone.visible = false;
   scene.add(ghostZone);
+
+  // flying jandal pool + lightning bolt pool (electric fence)
+  const flyers = [];
+  for (let i = 0; i < 12; i++) { const f = makeFlyingJandal(); f.visible = false; scene.add(f); flyers.push(f); }
+  const bolts = [];
+  for (let i = 0; i < 10; i++) {
+    const g = new BufferGeometry(); g.setAttribute('position', new Float32BufferAttribute(new Float32Array(10 * 3), 3));
+    const l = new Line(g, new LineBasicMaterial({ color: '#cfefff', transparent: true, opacity: 1, blending: AdditiveBlending, depthWrite: false }));
+    l.frustumCulled = false; l.visible = false; l.userData.life = 0; scene.add(l); bolts.push(l);
+  }
+  function bolt(ax, ay, az, bx, by, bz) {
+    const l = bolts.find((b) => b.userData.life <= 0) || bolts[0];
+    const a = l.geometry.attributes.position;
+    for (let i = 0; i < 10; i++) {
+      const k = i / 9, j = i === 0 || i === 9 ? 0 : 0.35;
+      a.setXYZ(i, ax + (bx - ax) * k + (Math.random() - 0.5) * j, ay + (by - ay) * k + (Math.random() - 0.5) * j, az + (bz - az) * k + (Math.random() - 0.5) * j);
+    }
+    a.needsUpdate = true; l.userData.life = 0.16; l.visible = true;
+  }
 
   const cam = { pivot: new Vector3(14, 4, 2), dist: CAMERA.dist, kick: 0, recoil: 0, shake: 0, fwd: new Vector3(), right: new Vector3() };
   let t = 0, hitMark = 0, lastSquawk = 0;
@@ -178,9 +197,30 @@ export function createView({ scene, camera, fx, audio, hud }) {
       } else if (tr.type === 'jandal') {
         const cd = T.cd - tr.cd;
         let a = 0;
-        if (tr.fired && cd < 0.1) a = -1.55 * (cd / 0.1);
-        else if (tr.fired && cd < 0.9) a = -1.55 * (1 - (cd - 0.1) / 0.8);
+        if (tr.fired && cd < 0.08) a = -1.3 * (cd / 0.08);
+        else if (tr.fired && cd < 0.6) a = -1.3 * (1 - (cd - 0.08) / 0.52);
         P.arm.rotation.x = a;
+        P.loaded.visible = !tr.fired || cd > T.cd * 0.65; // the jandal is in the air; a fresh one pops in when reloaded
+        if (P.loaded.visible && tr.fired && cd < T.cd * 0.65 + 0.15) P.loaded.scale.setScalar(Math.min(1, (cd - T.cd * 0.65) / 0.15 + 0.01)); else P.loaded.scale.setScalar(1);
+      } else if (tr.type === 'catapult') {
+        const since = T.cd - tr.cd;
+        let a = 0;
+        if (tr.phase === 'drop') a = -0.04;
+        else if (tr.fired && since < 0.1) a = 1.25 * (since / 0.1);
+        else if (tr.fired && since < 1.2) a = 1.25 * (1 - (since - 0.1) / 1.1);
+        P.lid.rotation.z = a;
+        P.arrows.position.x = ((t * 0.7) % 0.4) - 0.2;
+      } else if (tr.type === 'zapper') {
+        const since = T.cd - tr.cd;
+        P.wireMat.emissiveIntensity = tr.fired && since < 0.25 ? 6 * (1 - since / 0.25) : 0.15 + 0.15 * Math.max(0, Math.sin(t * 9 + tr.id));
+        if (tr.cd <= 0 && Math.random() < dt * 3) fx.emit(tr.x + tr.wnx * 0.2 + (Math.random() - 0.5) * 1.6 * Math.abs(tr.wnz), tr.y + (Math.floor(Math.random() * 3) - 1) * 0.45, tr.z + tr.wnz * 0.2 + (Math.random() - 0.5) * 1.6 * Math.abs(tr.wnx), 2, { color: ['#cfefff', '#66ccff'], speed: 1.2, life: 0.18, size: 0.08, gravity: 0 });
+      } else if (tr.type === 'stomper') {
+        const bottom = -(tr.y - tr.floor) + 0.9;
+        let y = -0.3;
+        if (tr.phase === 'drop') { const p = 1 - Math.max(0, tr.pt) / T.delay; y = -0.3 + (bottom + 0.3) * p * p; }
+        else if (tr.fired) { const since = T.cd - tr.cd; if (since < 0.15) y = bottom; else if (since < 0.9) y = bottom + (-0.3 - bottom) * ((since - 0.15) / 0.75); }
+        P.drop.position.y = y;
+        P.piston.scale.y = Math.max(0.05, -y - 0.2);
       } else if (tr.type === 'gate') {
         const bottom = -(tr.y - tr.floor) + 0.12;
         let y = -0.25;
@@ -205,6 +245,8 @@ export function createView({ scene, camera, fx, audio, hud }) {
       if (P.arm) { P.arm.rotation.order = 'YXZ'; P.arm.rotation.y = -Math.atan2(tr.wnx * tr.nz - tr.wnz * tr.nx, tr.wnx * tr.nx + tr.wnz * tr.nz); }
     } else if (tr.type === 'wet') {
       R.userData.parts.arrows.rotation.y = Math.atan2(-tr.nz, tr.nx);
+    } else if (tr.type === 'catapult') {
+      R.rotation.y = Math.atan2(-tr.nz, tr.nx); // local +X = launch direction
     }
   }
 
@@ -314,6 +356,8 @@ export function createView({ scene, camera, fx, audio, hud }) {
         case 'squawk': if (t - lastSquawk > 0.7) { lastSquawk = t; audio.play('squawk'); } break;
         case 'spawn': fx.emit(e.x, 0.3, e.z, 8, { color: ['#d8d2bf', '#aaaaaa'], speed: 2, life: 0.6, size: 0.4, gravity: 0, grow: 0.5, alpha: 0.6 }); break;
         case 'land': fx.emit(e.x, e.y + 0.1, e.z, e.etype === 'mower' ? 14 : 6, { color: ['#c8b89a', '#8a7a5a'], speed: 2.5, life: 0.6, size: 0.35, gravity: 1, grow: 0.5, alpha: 0.6 }); break;
+        case 'jandalHit': audio.play('slap', null, 0.04); hud.floater('SLAP!', 'trap', e.x, e.y + 0.6, e.z); fx.emit(e.x, e.y, e.z, 10, { color: ['#ffffff', '#2f6ff0'], speed: 4, life: 0.4, size: 0.15, gravity: 5 }); cam.shake = Math.max(cam.shake, 0.04); break;
+        case 'jandalLand': audio.play('thud', null, 0.08); fx.emit(e.x, e.y + 0.05, e.z, 6, { color: ['#c8b89a', '#8a7a5a'], speed: 1.5, life: 0.5, size: 0.3, gravity: 1, grow: 0.4, alpha: 0.6 }); break;
         case 'jump': audio.play('jump'); break;
         case 'dash': audio.play('dash'); fx.emit(e.x, e.y + 0.3, e.z, 10, { color: ['#ffffff', '#c8d8e8'], speed: 2, life: 0.4, size: 0.3, gravity: 0, alpha: 0.6 }); break;
         case 'swap': audio.play('swap'); hud.toast(e.w === 'pie' ? 'Mince Pie Launcher — splash damage, big arc' : 'L&P Fizz Cannon — aim high for cracker shots'); break;
@@ -337,7 +381,14 @@ export function createView({ scene, camera, fx, audio, hud }) {
         fx.emit(tr.x, tr.y + 0.4, tr.z, 40, { color: ['#ff7a1a', '#ffd23a', '#ff3a1a', '#fff2a0'], speed: 3, up: 5, life: 0.7, size: 0.3, gravity: -2, spread: 1.6 });
         fx.emit(tr.x, tr.y + 0.6, tr.z, 16, { color: ['#ffffff', '#dddddd'], speed: 1, up: 3, life: 1.2, size: 0.6, gravity: -1, grow: 1, alpha: 0.5, spread: 1.4 });
         break;
-      case 'jandal': audio.play('slap', null, 0.06); hud.floater('SLAP!', 'trap', tr.x + tr.wnx * 1.2, tr.y + 0.6, tr.z + tr.wnz * 1.2); cam.shake = Math.max(cam.shake, 0.04); break;
+      case 'jandal': audio.play('twang', null, 0.06); fx.emit(tr.x + tr.wnx * 0.4, tr.floor + 0.85, tr.z + tr.wnz * 0.4, 8, { color: ['#ffffff', '#d8c8a8'], speed: 2, life: 0.35, size: 0.2, gravity: 0, alpha: 0.6 }); break;
+      case 'zapper':
+        audio.play('zap', null, 0.08);
+        for (const g of e.targets || []) bolt(tr.x + tr.wnx * 0.18, tr.y, tr.z + tr.wnz * 0.18, g.x, g.y, g.z);
+        for (const g of e.targets || []) fx.emit(g.x, g.y, g.z, 8, { color: ['#cfefff', '#66ccff', '#ffffff'], speed: 4, life: 0.3, size: 0.12, gravity: 4 });
+        break;
+      case 'catapult': audio.play('boing', null, 0.08); fx.emit(tr.x, tr.y + 0.3, tr.z, 16, { color: ['#d8c8a8', '#ffffff'], speed: 3, up: 2, life: 0.5, size: 0.3, gravity: 3, alpha: 0.7, spread: 1.5 }); hud.floater('BOING!', 'trap', tr.x, tr.y + 1.5, tr.z); break;
+      case 'stomper': audio.play('stomp', null, 0.08); fx.emit(tr.x, tr.floor + 0.15, tr.z, 22, { color: ['#c8b89a', '#a8987a', '#ffffff'], speed: 4, life: 0.6, size: 0.35, gravity: 1, grow: 0.5, alpha: 0.7, spread: 1.6 }); cam.shake = Math.max(cam.shake, 0.08); break;
       case 'gate': audio.play('clang', null, 0.1); fx.emit(tr.x, tr.floor + 0.2, tr.z, 26, { color: ['#c8b89a', '#a8987a', '#ffffff'], speed: 4, life: 0.7, size: 0.4, gravity: 1, grow: 0.6, alpha: 0.7, spread: 2 }); cam.shake = Math.max(cam.shake, 0.12); break;
     }
   }
@@ -349,6 +400,16 @@ export function createView({ scene, camera, fx, audio, hud }) {
     syncEnemies(dt, S);
     syncTraps(dt, S);
     updateGhost(ctl, q);
+    // flying jandals: frisbee spin + wobble, pointing along their flight
+    for (let i = 0; i < flyers.length; i++) {
+      const m = flyers[i], f = S.flyers[i];
+      m.visible = !!f;
+      if (!f) continue;
+      m.position.set(f.x, f.y, f.z);
+      m.rotation.set(Math.sin(t * 13 + f.id) * 0.25, t * 26 + f.id, Math.cos(t * 11 + f.id) * 0.2);
+      if (Math.random() < 0.6) fx.emit(f.x, f.y, f.z, 1, { color: ['#ffffff', '#cfe0ff'], speed: 0.3, life: 0.25, size: 0.18, gravity: 0, alpha: 0.5 });
+    }
+    for (const b of bolts) if (b.userData.life > 0) { b.userData.life -= dt; b.material.opacity = Math.max(0, b.userData.life / 0.16); if (b.userData.life <= 0) b.visible = false; }
     // mower drone loudness follows the nearest mower
     let near = 99;
     for (const e of S.enemies) if (e.type === 'mower') near = Math.min(near, Math.hypot(e.x - S.player.x, e.z - S.player.z));

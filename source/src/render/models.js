@@ -2,14 +2,22 @@
 // the bits the view animates. Geometries and materials are shared between instances.
 import {
   Group, Mesh, BoxGeometry, SphereGeometry, CylinderGeometry, ConeGeometry, CapsuleGeometry, TorusGeometry, PlaneGeometry,
-  MeshStandardMaterial, MeshBasicMaterial, Shape, ExtrudeGeometry, DoubleSide, CircleGeometry,
+  MeshStandardMaterial, MeshPhysicalMaterial, MeshBasicMaterial, Shape, ExtrudeGeometry, DoubleSide, CircleGeometry, Color,
 } from 'three';
 import { TEX } from './textures.js';
 
 const mats = new Map();
+// physically based: rough materials (fur, feathers, cloth, rubber) get a soft sheen; smooth non-metals (plastic,
+// paint, enamel) get a clearcoat so they catch the sky environment like the real thing
 const M = (color, o = {}) => {
   const k = color + JSON.stringify(o);
-  if (!mats.has(k)) mats.set(k, new MeshStandardMaterial({ color, roughness: 0.7, ...o }));
+  if (!mats.has(k)) {
+    const rough = o.roughness ?? 0.7, metal = o.metalness ?? 0;
+    const p = { color, roughness: 0.7, ...o };
+    if (rough >= 0.85) Object.assign(p, { sheen: 0.8, sheenRoughness: 0.6, sheenColor: new Color(color).lerp(new Color('#ffffff'), 0.4) });
+    else if (rough <= 0.45 && metal < 0.3 && !o.transparent) Object.assign(p, { clearcoat: 0.6, clearcoatRoughness: 0.15 });
+    mats.set(k, new MeshPhysicalMaterial(p));
+  }
   return mats.get(k);
 };
 const geos = new Map();
@@ -40,13 +48,13 @@ export function makePlayer() {
   part(body, G('shorts', () => new BoxGeometry(0.48, 0.3, 0.3)), stubbies, 0, 0.98, 0);
   const torso = pivot(body, 0, 1.1, 0);
   part(torso, G('torso', () => new CapsuleGeometry(0.24, 0.32, 4, 10)), singlet, 0, 0.26, 0, { sz: 0.8 });
-  part(torso, G('belly', () => new SphereGeometry(0.22, 12, 8)), singlet, 0, 0.12, -0.08);
+  part(torso, G('belly', () => new SphereGeometry(0.22, 20, 14)), singlet, 0, 0.12, -0.08);
   const head = pivot(torso, 0, 0.72, 0);
-  part(head, G('head', () => new SphereGeometry(0.17, 14, 10)), skin, 0, 0, 0);
+  part(head, G('head', () => new SphereGeometry(0.17, 20, 14)), skin, 0, 0, 0);
   part(head, G('hat', () => new CylinderGeometry(0.17, 0.19, 0.14, 14)), M('#c9b98a'), 0, 0.11, 0);
   part(head, G('brim', () => new CylinderGeometry(0.29, 0.31, 0.03, 16)), M('#b8a878'), 0, 0.05, 0);
   part(head, G('sunnies', () => new BoxGeometry(0.28, 0.06, 0.04)), M('#ff3d7a', { metalness: 0.6, roughness: 0.2 }), 0, 0.01, -0.16, { cast: false });
-  part(head, G('beard', () => new SphereGeometry(0.13, 10, 8)), M('#6b3d1e', { roughness: 1 }), 0, -0.1, -0.06, { sy: 0.7, cast: false });
+  part(head, G('beard', () => new SphereGeometry(0.13, 20, 14)), M('#6b3d1e', { roughness: 1 }), 0, -0.1, -0.06, { sy: 0.7, cast: false });
   // arms: right holds the gun, left on the fore-grip
   const armR = pivot(torso, 0.3, 0.48, 0), armL = pivot(torso, -0.3, 0.48, 0);
   for (const a of [armR, armL]) { part(a, G('arm', () => new CylinderGeometry(0.065, 0.06, 0.55, 8)), skin, 0, -0.25, 0); }
@@ -78,13 +86,13 @@ export function makeGull() {
   const white = M('#f4f4f0', { roughness: 0.9 }), grey = M('#9aa3ab', { roughness: 0.9 }), orange = M('#f08a24'), yellow = M('#ffd21a');
   const legs = [];
   for (const s of [-1, 1]) { const l = pivot(body, s * 0.1, 0.38, 0); part(l, G('gleg', () => new CylinderGeometry(0.025, 0.025, 0.38, 6)), orange, 0, -0.19, 0); part(l, G('gfoot', () => new BoxGeometry(0.1, 0.02, 0.14)), orange, 0, -0.38, -0.04); legs.push(l); }
-  part(body, G('gbody', () => new SphereGeometry(0.3, 14, 10)), white, 0, 0.58, 0, { sz: 1.45, sy: 0.85 });
+  part(body, G('gbody', () => new SphereGeometry(0.3, 20, 14)), white, 0, 0.58, 0, { sz: 1.45, sy: 0.85 });
   part(body, G('gtail', () => new ConeGeometry(0.14, 0.3, 6)), grey, 0, 0.62, 0.42, { rx: 1.9 });
   const head = pivot(body, 0, 0.86, -0.32);
-  part(head, G('ghead', () => new SphereGeometry(0.16, 12, 10)), white, 0, 0, 0);
+  part(head, G('ghead', () => new SphereGeometry(0.16, 20, 14)), white, 0, 0, 0);
   part(head, G('gbeak', () => new ConeGeometry(0.05, 0.22, 6)), yellow, 0, -0.03, -0.2, { rx: -Math.PI / 2 });
-  part(head, G('gdot', () => new SphereGeometry(0.02, 6, 4)), M('#d8202a'), 0, -0.06, -0.24, { cast: false });
-  for (const s of [-1, 1]) part(head, G('geye', () => new SphereGeometry(0.03, 6, 4)), M('#111'), s * 0.09, 0.04, -0.1, { cast: false });
+  part(head, G('gdot', () => new SphereGeometry(0.02, 20, 14)), M('#d8202a'), 0, -0.06, -0.24, { cast: false });
+  for (const s of [-1, 1]) part(head, G('geye', () => new SphereGeometry(0.03, 20, 14)), M('#111'), s * 0.09, 0.04, -0.1, { cast: false });
   part(head, G('gbrow', () => new BoxGeometry(0.22, 0.03, 0.04)), grey, 0, 0.09, -0.12, { rz: 0, cast: false });
   const wings = [];
   for (const s of [-1, 1]) { const w = pivot(body, s * 0.24, 0.68, 0); part(w, G('gwing', () => new BoxGeometry(0.5, 0.04, 0.42)), grey, s * 0.25, 0, 0); wings.push(w); }
@@ -98,16 +106,16 @@ export function makePossum() {
   const fur = M('#6b5a4a', { roughness: 1 }), furL = M('#a8988a', { roughness: 1 }), pink = M('#e7a0a8');
   const legs = [];
   for (const s of [-1, 1]) { const l = pivot(body, s * 0.18, 0.28, 0.05); part(l, G('pleg', () => new CylinderGeometry(0.07, 0.06, 0.28, 8)), fur, 0, -0.14, 0); legs.push(l); }
-  part(body, G('pbody', () => new SphereGeometry(0.36, 14, 10)), fur, 0, 0.55, 0, { sy: 1.15 });
-  part(body, G('pbelly', () => new SphereGeometry(0.26, 12, 8)), furL, 0, 0.5, -0.14);
+  part(body, G('pbody', () => new SphereGeometry(0.36, 20, 14)), fur, 0, 0.55, 0, { sy: 1.15 });
+  part(body, G('pbelly', () => new SphereGeometry(0.26, 20, 14)), furL, 0, 0.5, -0.14);
   const head = pivot(body, 0, 1.0, -0.06);
-  part(head, G('phead', () => new SphereGeometry(0.24, 14, 10)), fur, 0, 0, 0);
-  part(head, G('psnout', () => new SphereGeometry(0.12, 10, 8)), furL, 0, -0.06, -0.2);
-  part(head, G('pnose', () => new SphereGeometry(0.045, 8, 6)), pink, 0, -0.03, -0.31, { cast: false });
+  part(head, G('phead', () => new SphereGeometry(0.24, 20, 14)), fur, 0, 0, 0);
+  part(head, G('psnout', () => new SphereGeometry(0.12, 20, 14)), furL, 0, -0.06, -0.2);
+  part(head, G('pnose', () => new SphereGeometry(0.045, 20, 14)), pink, 0, -0.03, -0.31, { cast: false });
   for (const s of [-1, 1]) {
-    part(head, G('pear', () => new SphereGeometry(0.09, 8, 6)), fur, s * 0.17, 0.2, 0.02, { sx: 0.6, sy: 1.2 });
-    part(head, G('peye', () => new SphereGeometry(0.075, 10, 8)), M('#0b0b0b', { roughness: 0.15 }), s * 0.1, 0.05, -0.17, { cast: false });
-    part(head, G('pshine', () => new SphereGeometry(0.02, 6, 4)), M('#ffffff', { emissive: '#ffffff' }), s * 0.09 + 0.02, 0.08, -0.24, { cast: false });
+    part(head, G('pear', () => new SphereGeometry(0.09, 20, 14)), fur, s * 0.17, 0.2, 0.02, { sx: 0.6, sy: 1.2 });
+    part(head, G('peye', () => new SphereGeometry(0.075, 20, 14)), M('#0b0b0b', { roughness: 0.15 }), s * 0.1, 0.05, -0.17, { cast: false });
+    part(head, G('pshine', () => new SphereGeometry(0.02, 20, 14)), M('#ffffff', { emissive: '#ffffff' }), s * 0.09 + 0.02, 0.08, -0.24, { cast: false });
   }
   const tail = pivot(body, 0, 0.4, 0.3);
   part(tail, G('ptail', () => new CylinderGeometry(0.12, 0.05, 0.8, 8)), M('#3d3128', { roughness: 1 }), 0, 0.35, 0.15, { rx: 0.5 });
@@ -135,8 +143,8 @@ export function makeMower() {
   }
   // angry headlight eyes + eyebrows
   for (const s of [-1, 1]) {
-    part(body, G('meye', () => new SphereGeometry(0.13, 10, 8)), M('#fff6a8', { emissive: '#ffe66a', emissiveIntensity: 1.5 }), s * 0.28, 1.0, -0.86, { cast: false });
-    part(body, G('mpupil', () => new SphereGeometry(0.05, 6, 4)), M('#111'), s * 0.26, 0.98, -0.97, { cast: false });
+    part(body, G('meye', () => new SphereGeometry(0.13, 20, 14)), M('#fff6a8', { emissive: '#ffe66a', emissiveIntensity: 1.5 }), s * 0.28, 1.0, -0.86, { cast: false });
+    part(body, G('mpupil', () => new SphereGeometry(0.05, 20, 14)), M('#111'), s * 0.26, 0.98, -0.97, { cast: false });
     part(body, G('mbrow', () => new BoxGeometry(0.3, 0.06, 0.06)), black, s * 0.28, 1.15, -0.88, { rz: s * 0.45, cast: false });
   }
   part(body, G('mgrill', () => new BoxGeometry(0.6, 0.12, 0.05)), M('#eeeeee', { metalness: 0.8 }), 0, 0.8, -0.86, { cast: false });
@@ -183,7 +191,7 @@ export function makeTrap(type) {
     P.arrows = arrows;
   } else if (type === 'marmite') {
     part(root, G('mpad', () => new CylinderGeometry(0.98, 1.0, 0.07, 20)), M('#3a1f0a', { roughness: 0.12, metalness: 0.05 }), 0, 0.035, 0, { cast: false, sz: 0.96 });
-    for (let i = 0; i < 7; i++) part(root, G('mblob', () => new SphereGeometry(0.18, 10, 6)), M('#2c1606', { roughness: 0.1 }), Math.cos(i * 0.9) * 0.6, 0.05, Math.sin(i * 0.9) * 0.6, { sy: 0.35, cast: false });
+    for (let i = 0; i < 7; i++) part(root, G('mblob', () => new SphereGeometry(0.18, 20, 14)), M('#2c1606', { roughness: 0.1 }), Math.cos(i * 0.9) * 0.6, 0.05, Math.sin(i * 0.9) * 0.6, { sy: 0.35, cast: false });
     const jar = pivot(root, 0.78, 0, -0.78);
     part(jar, G('mjar', () => new CylinderGeometry(0.17, 0.2, 0.42, 12)), M('#1a0d05', { roughness: 0.15 }), 0, 0.21, 0);
     part(jar, G('mlid', () => new CylinderGeometry(0.17, 0.17, 0.08, 12)), M('#ffcf1a', { roughness: 0.4 }), 0, 0.46, 0);
@@ -202,11 +210,13 @@ export function makeTrap(type) {
     for (let i = 0; i < 4; i++) part(root, G('jspring', () => new TorusGeometry(0.16, 0.025, 6, 12)), M('#c8c8c8', { metalness: 0.9, roughness: 0.25 }), 0, 0, -0.12 - i * 0.07);
     const arm = pivot(root, 0, -0.6, -0.12); // hinge at the bottom
     const sole = new ExtrudeGeometry(jandalShape(), { depth: 0.08, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 1 });
-    part(arm, G('jsole', () => sole), M('#2f6ff0', { roughness: 0.6 }), 0, 0.62, -0.25);
-    part(arm, G('jsoleTop', () => new ExtrudeGeometry(jandalShape(), { depth: 0.02, bevelEnabled: false })), M('#ffffff', { roughness: 0.8 }), 0, 0.62, -0.35, { sx: 0.92, sy: 0.92 });
-    part(arm, G('jstrap', () => new TorusGeometry(0.28, 0.035, 6, 16, Math.PI)), M('#ffffff'), 0, 0.68, -0.37, { rz: 0 });
-    part(arm, G('jtoe', () => new CylinderGeometry(0.03, 0.03, 0.1, 6)), M('#ffffff'), 0, 1.2, -0.38, { rx: Math.PI / 2, cast: false });
-    P.arm = arm;
+    part(arm, G('jpaddle', () => new BoxGeometry(0.9, 1.5, 0.06)), M('#8a6a48', { roughness: 0.8 }), 0, 0.7, -0.18);
+    const loaded = pivot(arm, 0, 0, 0);
+    part(loaded, G('jsole', () => sole), M('#2f6ff0', { roughness: 0.6 }), 0, 0.62, -0.25);
+    part(loaded, G('jsoleTop', () => new ExtrudeGeometry(jandalShape(), { depth: 0.02, bevelEnabled: false })), M('#ffffff', { roughness: 0.8 }), 0, 0.62, -0.35, { sx: 0.92, sy: 0.92 });
+    part(loaded, G('jstrap', () => new TorusGeometry(0.28, 0.035, 6, 16, Math.PI)), M('#ffffff'), 0, 0.68, -0.37, { rz: 0 });
+    part(loaded, G('jtoe', () => new CylinderGeometry(0.03, 0.03, 0.1, 6)), M('#ffffff'), 0, 1.2, -0.38, { rx: Math.PI / 2, cast: false });
+    P.arm = arm; P.loaded = loaded;
   } else if (type === 'gate') {
     // root at the roof underside; the gate hangs in "drop" child
     const steel = M('#c9d2d8', { metalness: 0.85, roughness: 0.3 });
@@ -223,13 +233,60 @@ export function makeTrap(type) {
       wires.push(w);
     }
     P.drop = drop; P.wires = wires;
+  } else if (type === 'catapult') {
+    // a chilly bin lid on a sprung hinge: P.lid pivots on its back edge (local +X is the launch direction)
+    part(root, G('cbase', () => new BoxGeometry(1.9, 0.12, 1.9)), M('#3a3f45', { metalness: 0.5, roughness: 0.5 }), 0, 0.06, 0, { cast: false });
+    const hinge = pivot(root, -0.9, 0.14, 0);
+    const lid = pivot(hinge, 0, 0, 0);
+    part(lid, G('clid', () => new BoxGeometry(1.8, 0.14, 1.75)), M('#f4f4f2', { roughness: 0.35 }), 0.9, 0.07, 0);
+    part(lid, G('cbin', () => new BoxGeometry(1.7, 0.18, 1.65)), M('#2a7fd4', { roughness: 0.4 }), 0.9, -0.06, 0);
+    part(lid, G('chandle', () => new BoxGeometry(0.5, 0.06, 0.12)), M('#ffffff'), 0.9, 0.17, 0);
+    for (let i = 0; i < 3; i++) part(root, G('cspring', () => new TorusGeometry(0.22, 0.03, 6, 14)), M('#c8c8c8', { metalness: 0.9, roughness: 0.25 }), 0.2, 0.08 + i * 0.03, 0, { rx: Math.PI / 2, cast: false });
+    const arrows = pivot(root, 0, 0.3, 0); // launch direction marker
+    part(arrows, G('carrow', () => { const c = new ConeGeometry(0.18, 0.35, 3); c.rotateZ(-Math.PI / 2); c.scale(1, 1, 0.05); c.rotateX(Math.PI / 2); return c; }), M('#ffd21f', { emissive: '#ffb000', emissiveIntensity: 0.6 }), 0.95, 0.0, 0, { cast: false });
+    P.hinge = hinge; P.lid = lid; P.arrows = arrows;
+  } else if (type === 'zapper') {
+    // hot-wired No. 8 wire fence on the wall; local -Z points away from the wall
+    part(root, G('zplate', () => new BoxGeometry(1.8, 1.2, 0.06)), M('#6d5a48', { roughness: 0.9 }), 0, 0, -0.03);
+    const wireMat = new MeshStandardMaterial({ color: '#c9d0d4', metalness: 0.9, roughness: 0.3, emissive: '#66ccff', emissiveIntensity: 0 });
+    for (const x of [-0.8, 0.8]) for (const y of [-0.45, 0, 0.45]) part(root, G('zins', () => new CylinderGeometry(0.04, 0.05, 0.14, 8)), M('#f6f0e0', { roughness: 0.3 }), x, y, -0.1, { rx: Math.PI / 2 });
+    for (const y of [-0.45, 0, 0.45]) part(root, G('zwire', () => new CylinderGeometry(0.012, 0.012, 1.75, 5)), wireMat, 0, y, -0.17, { rz: Math.PI / 2, cast: false });
+    part(root, G('zbox', () => new BoxGeometry(0.32, 0.4, 0.16)), M('#e8c21a', { roughness: 0.5 }), 0.62, 0.65, -0.1);
+    part(root, G('zsign', () => new PlaneGeometry(0.5, 0.32)), new MeshStandardMaterial({ map: TEX.sign(['ELECTRIC', 'FENCE'], '#ffd21f', '#111'), roughness: 0.6 }), -0.4, 0.68, -0.07, { ry: Math.PI, cast: false });
+    P.wireMat = wireMat;
+  } else if (type === 'stomper') {
+    // piston-driven giant gumboot under the roof; P.drop is lowered by the view
+    part(root, G('sbr', () => new BoxGeometry(0.9, 0.12, 0.9)), M('#555b60', { metalness: 0.7, roughness: 0.4 }), 0, -0.06, 0);
+    const drop = pivot(root, 0, -0.3, 0);
+    const piston = part(root, G('spist', () => { const c = new CylinderGeometry(0.09, 0.09, 1, 10); c.translate(0, -0.5, 0); return c; }), M('#c9d2d8', { metalness: 0.9, roughness: 0.2 }), 0, -0.1, 0);
+    const rub = M('#141414', { roughness: 0.35 });
+    part(drop, G('sshaft', () => new CylinderGeometry(0.42, 0.46, 1.1, 18)), rub, 0, 0.0, 0);
+    part(drop, G('sfoot', () => new BoxGeometry(0.95, 0.4, 1.5)), rub, 0, -0.6, -0.3);
+    part(drop, G('stoe', () => new SphereGeometry(0.48, 20, 14)), rub, 0, -0.62, -0.95, { sy: 0.45 });
+    part(drop, G('ssole', () => new BoxGeometry(1.0, 0.1, 1.95)), M('#3a2a1a', { roughness: 0.9 }), 0, -0.84, -0.48);
+    part(drop, G('sband', () => new CylinderGeometry(0.47, 0.47, 0.08, 18)), M('#d8302a'), 0, 0.5, 0, { cast: false });
+    P.drop = drop; P.piston = piston;
   }
   // "disabled" pine-cone sludge marker
-  const gum = part(root, G('gum', () => new SphereGeometry(0.25, 8, 6)), M('#5a3a1a', { roughness: 1 }), 0, type === 'jandal' ? 0 : type === 'gate' ? -0.4 : 0.3, type === 'jandal' ? -0.3 : 0, { cast: false });
+  const gum = part(root, G('gum', () => new SphereGeometry(0.25, 20, 14)), M('#5a3a1a', { roughness: 1 }), 0, type === 'jandal' || type === 'zapper' ? 0 : type === 'gate' || type === 'stomper' ? -0.4 : 0.3, type === 'jandal' || type === 'zapper' ? -0.3 : 0, { cast: false });
   gum.visible = false; P.gum = gum;
   root.userData.parts = P;
   root.userData.type = type;
   return root;
+}
+
+// the projectile the Flying Jandal trap launches
+export function makeFlyingJandal() {
+  const g = new Group();
+  const sole = new Mesh(G('fjsole', () => { const e = new ExtrudeGeometry(jandalShape(), { depth: 0.08, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 1 }); e.center(); return e; }), M('#2f6ff0', { roughness: 0.6 }));
+  const top = new Mesh(G('fjtop', () => { const e = new ExtrudeGeometry(jandalShape(), { depth: 0.02, bevelEnabled: false }); e.center(); return e; }), M('#ffffff', { roughness: 0.8 }));
+  top.position.z = 0.07; top.scale.set(0.92, 0.92, 1);
+  const strap = new Mesh(G('fjstrap', () => new TorusGeometry(0.28, 0.035, 6, 16, Math.PI)), M('#ffffff'));
+  strap.position.set(0, 0.05, 0.08);
+  const inner = new Group(); inner.add(sole, top, strap); inner.rotation.x = -Math.PI / 2; // lie flat, sole down
+  g.add(inner);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
 }
 
 // translucent ghost (green = valid, red = invalid)
@@ -241,7 +298,7 @@ export function makeGhost(type) {
   g.userData.parts.gum.visible = false;
   const pad = new Mesh(G('ghostPad', () => new PlaneGeometry(2, 2)), ghostOk);
   pad.rotation.x = -Math.PI / 2; pad.position.y = 0.03;
-  if (type === 'wet' || type === 'marmite' || type === 'sizzle') g.add(pad);
+  if (type === 'wet' || type === 'marmite' || type === 'sizzle' || type === 'catapult') g.add(pad);
   g.userData.setOk = (ok) => g.traverse((o) => { if (o.isMesh) o.material = ok ? ghostOk : ghostBad; });
   return g;
 }
