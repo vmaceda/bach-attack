@@ -1,6 +1,6 @@
 // View: mirrors sim.state into three.js objects every frame, runs the third-person camera rig (sphere-swept so walls
 // and beams push it in), and turns sim events into particles, sounds and HUD pops. Never mutates the sim.
-import { Vector3, Mesh, PlaneGeometry, BoxGeometry, MeshBasicMaterial, Group, ConeGeometry, BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, AdditiveBlending } from 'three';
+import { Vector3, Quaternion, Mesh, PlaneGeometry, BoxGeometry, MeshBasicMaterial, Group, ConeGeometry, BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, AdditiveBlending } from 'three';
 import { makePlayer, ENEMY_MODEL, makeHealthBar, makeTrap, makeGhost, makeFlyingJandal } from './models.js';
 import { CAMERA, ENEMIES, TRAPS, TRAP_BY_ID } from '../contracts.js';
 import { sweepSphere } from '../sim/world.js';
@@ -108,6 +108,12 @@ export function createView({ scene, camera, fx, audio, hud }) {
   }
 
   // ---- BAZZA: bobble head, belly jiggle, waddle, and idle antics when you leave him alone
+  // two-handed hold: each arm (which hangs along -Y from its shoulder pivot) is rotated to point from the shoulder at
+  // its hand target on the cannon (torso space): right hand on the pistol grip, left hand under the tank's front
+  const DOWN = new Vector3(0, -1, 0);
+  const holdQ = (shoulder, hand) => new Quaternion().setFromUnitVectors(DOWN, hand.clone().sub(shoulder).normalize());
+  const Q_ARM_R = holdQ(new Vector3(0.34, 0.5, 0), new Vector3(0.16, 0.12, -0.3));
+  const Q_ARM_L = holdQ(new Vector3(-0.34, 0.5, 0), new Vector3(0.06, 0.24, -0.52));
   const BZ = { lastYaw: 0, lastSp: 0, lastVy: 0, headX: 0, headZ: 0, headVX: 0, headVZ: 0, belly: 0, bellyV: 0, idleT: 0, antic: -1, gum: 0, chat: 4 };
   const BAZZA_IDLE = ['Is this thing on?', 'Bored as, bro', 'Wanna see me belly button?', 'Got any pies?', 'Yeah nah yeah nah', 'Hurry up, pests!', '*whistles badly*', 'Mum, look! No traps!'];
   const BAZZA_HYPE = ['CHUR!', 'Sweet as, bro!', 'Hard out!', 'Too easy!', 'Mean as!', 'Yeah the boys!', 'Ka pai!', 'Get wrecked!', 'Oi oi oi!', 'She\'ll be right!'];
@@ -157,14 +163,14 @@ export function createView({ scene, camera, fx, audio, hud }) {
     const antic = anticT > 0 ? Math.floor(anticT / 4) % 3 : -1;
     if (antic !== BZ.antic) { BZ.antic = antic; if (antic >= 0) bazzaSay(BAZZA_IDLE, true); }
     PP.gun.visible = antic < 0;
-    let armRx = -1.2, armRz = 0, armLx = -1.35, armLz = 0.55, bodyY = 0;
+    let armRx = 0, armRz = 0, armLx = 0, armLz = 0, bodyY = 0;
     if (antic === 0) { // the dance
       const d = t * 9;
-      armRx = -2.6 + Math.sin(d) * 0.5; armLx = -2.6 - Math.sin(d) * 0.5; armRz = -0.4; armLz = 0.4;
+      armRx = Math.sin(d) * 0.4; armLx = -Math.sin(d) * 0.4; armRz = 2.3 + Math.sin(d * 2) * 0.25; armLz = -2.3 - Math.sin(d * 2) * 0.25; // raise the roof
       bodyY = Math.sin(d * 0.5) * 0.6; PP.body.position.y = Math.abs(Math.sin(d)) * 0.08; PP.body.rotation.z = Math.sin(d) * 0.2;
     } else if (antic === 1) { // drumming the belly
       const d = t * 12;
-      armRx = -0.5 + Math.max(0, Math.sin(d)) * 0.5; armLx = -0.5 + Math.max(0, -Math.sin(d)) * 0.5; armRz = 0.5; armLz = -0.5;
+      armRx = 0.9 + Math.max(0, Math.sin(d)) * 0.4; armLx = 0.9 + Math.max(0, -Math.sin(d)) * 0.4; armRz = 0.35; armLz = -0.35; // patting the gut in front
       if (Math.sin(d) > 0.97 || Math.sin(d) < -0.97) { BZ.bellyV += 3; }
     } else if (antic === 2) { // bubble gum, then POP
       const g = (anticT % 4) / 3.2;
@@ -172,13 +178,14 @@ export function createView({ scene, camera, fx, audio, hud }) {
       else if (PP.gum.scale.x > 0.5) { PP.gum.scale.setScalar(0.01); audio.play('pop'); fx.emit(player.position.x, player.position.y + 2.3, player.position.z, 8, { color: '#ff7ac8', speed: 2, life: 0.4, size: 0.12, gravity: 4 }); }
     }
     if (antic !== 2) PP.gum.scale.setScalar(0.01);
-    PP.armR.rotation.set(armRx, 0, armRz); PP.armL.rotation.set(armLx, 0, armLz);
+    if (antic < 0) { PP.armR.quaternion.copy(Q_ARM_R); PP.armL.quaternion.copy(Q_ARM_L); }
+    else { PP.armR.rotation.set(armRx, 0, armRz); PP.armL.rotation.set(armLx, 0, armLz); }
     PP.body.rotation.y = bodyY;
     PP.body.rotation.x = P.dead ? -Math.PI / 2 : 0;
     PP.body.position.z = P.dead ? 0.6 : 0;
     PP.fizz.visible = P.weapon === 'fizz'; PP.pie.visible = P.weapon === 'pie';
     const since = S.t - P.firedT;
-    PP.gun.position.z = -0.5 + (since < 0.08 ? 0.08 * (1 - since / 0.08) : 0);
+    PP.gun.position.z = -0.4 + (since < 0.08 ? 0.06 * (1 - since / 0.08) : 0);
     const bsince = S.t - P.blowT;
     PP.blower.rotation.z = bsince < 0.4 ? Math.sin(bsince * 50) * 0.08 : 0;
     // random hype chatter mid-fight

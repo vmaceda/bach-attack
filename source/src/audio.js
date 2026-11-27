@@ -135,7 +135,38 @@ export function createAudio() {
     win() { const t = now(); [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone('square', f, f, 0.18, 0.09, t + i * 0.12)); },
   };
 
-  // ------------------------------------------------------------------ background track
+  // ------------------------------------------------------------------ soundtrack (MP3s in music/ next to index.html)
+  // Streamed with two <audio> elements so tracks crossfade. The title plays Island Defense March; every level picks
+  // a random track (never the same one twice in a row). If the files are missing (the bare single-file build), the
+  // procedural kazoo ditty below takes over. Browsers block audio until the first click/key, so a wanted track that
+  // was refused starts on the next gesture.
+  const TITLE_TRACK = 'music/island-defense-march.mp3';
+  const LEVEL_TRACKS = ['music/kiwi-quest.mp3', 'music/the-great-kiwi-heist.mp3', 'music/island-defense-march.mp3'];
+  const deck = [new Audio(), new Audio()];
+  let cur = 0, curSrc = '', external = true, extFails = 0;
+  for (const el of deck) {
+    el.loop = true; el.preload = 'auto'; el.volume = 0;
+    el.addEventListener('error', () => { if (el.src && ++extFails >= 2) external = false; });
+  }
+  const extTarget = () => (muted || !musicOn ? 0 : ducked ? 0.18 : 0.55);
+  setInterval(() => {
+    for (let i = 0; i < 2; i++) {
+      const el = deck[i], target = i === cur ? extTarget() : 0;
+      el.volume = Math.max(0, Math.min(1, el.volume + Math.sign(target - el.volume) * Math.min(Math.abs(target - el.volume), 0.04)));
+      if (i !== cur && el.volume === 0 && !el.paused) el.pause();
+    }
+  }, 50);
+  function playTrack(src) {
+    if (!external || src === curSrc) { tryResume(); return; }
+    curSrc = src; cur = 1 - cur;
+    const el = deck[cur];
+    el.src = src; el.currentTime = 0; el.volume = 0;
+    el.play()?.catch?.(() => {}); // refused before a gesture: tryResume() picks it up
+  }
+  function tryResume() { const el = deck[cur]; if (external && curSrc && el.paused) el.play()?.catch?.(() => {}); }
+  addEventListener('pointerdown', tryResume); addEventListener('keydown', tryResume);
+
+  // ------------------------------------------------------------------ background track (procedural fallback)
   // A cheesy BBQ ditty: ukulele strums + bass + boom-chick, with a KAZOO on the melody (sawtooth through a buzzy
   // waveshaper and a nasal band-pass, scooping up into every note). Waves speed it up and add hats. Every 9-22 s a
   // farmyard gag plays: a sheep, a tūī, cackling gulls or a distant cow. N toggles the music; M mutes everything.
@@ -183,7 +214,7 @@ export function createAudio() {
     while (nextT < ctx.currentTime + 0.15) {
       const t = nextT, i = stepN % MEL.length, bar = Math.floor(i / 8) % 4, beat = i % 8;
       const swing = beat % 2 ? eighth * 0.16 : 0, tt = t + swing;
-      if (musicOn && !muted) {
+      if (musicOn && !muted && !external) {
         const ch = CHORDS[bar];
         // ukulele: down-strum on beats, up-strum on the "and" of 2 and 4
         if (beat % 2 === 0 || beat === 3 || beat === 7) ch.forEach((n, k) => pluck(n + 12, tt + k * (beat % 2 ? 0.008 : 0.014), beat % 2 ? 0.035 : 0.05));
@@ -250,6 +281,10 @@ export function createAudio() {
       return musicOn;
     },
     setIntensity(v) { intensity = v ? 1 : 0; },
+    titleMusic() { playTrack(TITLE_TRACK); },
+    levelMusic() { const pool = LEVEL_TRACKS.filter((t) => t !== curSrc); playTrack(pool[Math.floor(Math.random() * pool.length)]); },
+    get track() { return external ? curSrc : 'procedural'; },
+    get playing() { const el = deck[cur]; return { paused: el.paused, time: +el.currentTime.toFixed(2), volume: +el.volume.toFixed(2), err: el.error && el.error.code }; },
     duck(on) { if (on === ducked) return; ducked = on; if (musicGain) musicGain.gain.setTargetAtTime(musicOn ? (on ? 0.1 : 0.32) : 0, ctx.currentTime, 0.2); },
   };
 }

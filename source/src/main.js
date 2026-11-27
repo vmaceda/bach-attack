@@ -57,6 +57,7 @@ function setState(s) {
 }
 function startGame() {
   audio.init();
+  audio.levelMusic();
   setState('playing');
   input.requestLock();
 }
@@ -77,6 +78,7 @@ function restart() {
   Object.assign(ctl, { yaw: sim.state.layout.playerSpawn.yaw, pitch: 12, build: false, trap: 0, rot: 0 });
   overTimer = 0;
   audio.init();
+  audio.levelMusic();
   setState('playing');
   input.requestLock();
   hud.banner('BUILD YOUR DEFENCES', 'Press B or 1–8 to place traps · G to send the first wave', '#ffd21f');
@@ -167,14 +169,14 @@ function frame(dt) {
 
   if (state === 'playing') fixed.advance(dt);
   audio.setIntensity(S.phase === 'wave');
-  audio.duck(state !== 'playing');
+  audio.duck(state === 'paused' || state === 'over');
   place = ctl.build && state !== 'title' ? sim.queryPlacement(cmd.rayO, cmd.rayD, ctl.trap, ctl.rot) : null;
 
   const events = sim.drainEvents();
   view.handle(events, S);
   for (const e of events) {
     if (e.type === 'lost') { overTimer = 1.6; audio.play('lose'); hud.gameOver(S); }
-    if (e.type === 'levelStart') { ctl.yaw = S.layout.playerSpawn.yaw; ctl.pitch = 14; ctl.build = false; }
+    if (e.type === 'levelStart') { audio.levelMusic(); ctl.yaw = S.layout.playerSpawn.yaw; ctl.pitch = 14; ctl.build = false; }
   }
   if (overTimer > 0) { overTimer -= dt; if (overTimer <= 0 && state === 'playing') { setState('over'); if (document.pointerLockElement) input.releaseLock(); } }
 
@@ -209,8 +211,9 @@ function loop(now) {
 }
 
 hud.show('title');
+audio.titleMusic(); // starts on the first click/key (browser autoplay rules)
 document.getElementById('boot').classList.add('done');
 setTimeout(() => document.getElementById('boot').remove(), 500);
-window.__game = { sim, input, ctl, view, get state() { return state; }, startGame, restart, pause, resume, camera };
+window.__game = { sim, input, ctl, view, audio, get state() { return state; }, startGame, restart, pause, resume, camera };
 if (params.get('autostart')) startGame();
 requestAnimationFrame(loop);

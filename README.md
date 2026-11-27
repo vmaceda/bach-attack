@@ -4,7 +4,7 @@ A third-person shooter trap-defence game set in a suburban Kiwi bach. Seagulls, 
 are after the beers in the bach fridge. You have wet decking, flying jandals, a sausage sizzle, Marmite and a No. 8 wire
 farm gate to stop them.
 
-**`index.html` is the whole game:** one ~755 KB file (~211 KB gzipped), with no CDN, no asset files and no `data:` blobs.
+**`index.html` is the whole game:** one ~755 KB file (~212 KB gzipped), plus the optional `music/` folder (~8 MB of MP3s), with no CDN, no asset files and no `data:` blobs.
 It follows the same model as WHITEOUT: three.js r180 is bundled by esbuild into a single HTML file, every texture is
 drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 
@@ -121,9 +121,12 @@ with alternates) and raises a combo streak.
   hills. A post chain adds ground-truth ambient occlusion (GTAO), soft bloom, AgX filmic tonemapping and a warm summer
   colour grade with vignette and grain. `?q=med` drops AO, `?q=low` turns post-processing off; an auto-governor does
   the same if the frame rate sags.
-- **Music:** a procedural BBQ ditty with ukulele strums, bass, boom-chick percussion and a scooping kazoo on the
-  melody. It speeds up during waves. Every 9–22 s a farmyard gag plays: a sheep, a tūī, cackling gulls or a distant
-  cow. N toggles the music, M mutes everything.
+- **Music:** three soundtrack MP3s live in `music/` next to `index.html`: **Island Defense March** plays on the
+  title screen, and every level picks a random track (*Kiwi Quest*, *The Great Kiwi Heist*, *Island Defense March*,
+  never the same twice in a row), crossfading between levels. Browsers only allow audio after the first click or key,
+  so the title track starts then. Every 9–22 s a farmyard gag plays over the top (a sheep, a tūī, cackling gulls or a
+  distant cow). N toggles the music, M mutes everything. If the `music/` folder is missing (for example when you copy
+  only `index.html`), a procedural ukulele-and-kazoo ditty plays instead, so the single file still works on its own.
 
 ## Source layout (`source/`)
 

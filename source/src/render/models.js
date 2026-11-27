@@ -139,9 +139,9 @@ export function makePlayer() {
     part(a, G('bzFore', () => new CylinderGeometry(0.07, 0.055, 0.28, 12)), tat, 0, -0.44, 0);
     part(a, G('bzFist', () => new SphereGeometry(0.065, 12, 8)), skin, 0, -0.6, 0, { sy: 0.85 });
   }
-  armR.rotation.x = -1.2; armL.rotation.set(-1.35, 0, 0.55);
+  // arm poses are set by the view (two-handed hold aimed at the cannon's grip / fore-end)
   // the L&P FIZZ CANNON: glass pressure tank of fizzy yellow, brass fittings, gauges, hose, flared nozzle
-  const gun = pivot(torso, 0.18, 0.33, -0.5);
+  const gun = pivot(torso, 0.14, 0.3, -0.4);
   const fizz = pivot(gun, 0, 0, 0);
   part(fizz, G('fcTank', () => new CylinderGeometry(0.13, 0.13, 0.42, 18)), TM('fcGlass', () => new MeshPhysicalMaterial({ color: '#fff2a0', roughness: 0.05, transmission: 0.0, transparent: true, opacity: 0.55, clearcoat: 1 })), 0, 0.03, 0.05, { rx: Math.PI / 2 });
   part(fizz, G('fcFizz', () => new CylinderGeometry(0.115, 0.115, 0.38, 16)), M('#f2d51a', { roughness: 0.2, emissive: '#5a4a00', emissiveIntensity: 0.6 }), 0, 0.0, 0.05, { rx: Math.PI / 2, cast: false });
