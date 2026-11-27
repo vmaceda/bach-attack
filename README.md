@@ -4,7 +4,7 @@ A third-person shooter trap-defence game set in a suburban Kiwi bach. Seagulls, 
 are after the beers in the bach fridge. You have wet decking, flying jandals, a sausage sizzle, Marmite and a No. 8 wire
 farm gate to stop them.
 
-**`index.html` is the whole game:** one ~755 KB file (~212 KB gzipped), plus the optional `music/` folder (~8 MB of MP3s), with no CDN, no asset files and no `data:` blobs.
+**`index.html` is the whole game:** one ~755 KB file (~212 KB gzipped), plus the optional `music/` folder (~8 MB of MP3s). The game file itself has no CDN, no asset files and no `data:` blobs.
 It follows the same model as WHITEOUT: three.js r180 is bundled by esbuild into a single HTML file, every texture is
 drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 
