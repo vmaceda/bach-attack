@@ -19,11 +19,12 @@ drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 | Leaf-blower | RMB or E. A short-range cone that shoves pests onto traps or off the deck into the compost gully |
 | Build | B toggles build mode. 1–8 select a trap (and enter build mode); the mouse wheel cycles traps. LMB places, R rotates directional traps, X or RMB sells for an 80 % refund (between waves only) |
 | Waves | G starts the next wave early, with bonus shrapnel for the time left on the build timer |
-| Meta | P or Esc pauses · Tab frees the cursor without pausing · M mutes everything · N toggles the music · Backspace restarts instantly · Enter restarts from the end screen |
+| Super | F calls in the Rain of Chips when the hot chips gauge is full |
+| Meta | P or Esc pauses · Tab frees the cursor without pausing · M mutes everything · N toggles the music · V toggles voices · Backspace restarts instantly · Enter restarts from the end screen |
 
 ## Endless random levels
 
-Each level is **3 waves**. Clear them and your traps are packed into the ute (100 % refund), the fridge gets a restock
+Each level is **10 waves**. Clear them and your traps are packed into the ute (100 % refund), the fridge gets a restock
 from the dairy (+6 beers), and you're dropped into a **brand-new, randomly generated bach** — "Uncle Dave's Crib,
 Raglan", "The Johnsons' Glamping Disaster, Piha"… Difficulty keeps climbing (generated waves after the handcrafted
 ones). It's endless; the game-over screen shows the level you reached and your best ever.
@@ -35,6 +36,28 @@ plus 1–3 spawn doors, a porch catwalk on a random side, and the fridge in the 
 Gully and one Carport, so every trap has somewhere to live. `tools/levels.mjs` validates generated maps (spawn on the
 porch, floor/wall/ceiling traps placeable, every pest can reach the fridge). Level 1 is always the handcrafted
 "Suburban Bach Chokepoint" below. Each new game uses a new seed (`?seed=N` to replay a run).
+
+## Super power: RAIN OF CHIPS
+
+Every pest you sort charges the **hot chips gauge** (the red chip carton, bottom right): seagull 1, possum 2, mower 5,
+40 points to fill. When it's full the carton glows and jiggles, the announcer says it's ready, and **F** (or clicking the
+carton) calls it in:
+
+1. Time slows, Bazza throws his arms up and yells "It's raining chips!", the sky turns gold, and every pest on the
+   field stops and stares at the sky ("...chips?").
+2. Hot chips pour from the sky for 4.5 s: each pest gets a chip aimed at where it will be, plus a downpour over the whole
+   yard. **Any pest a chip touches is eliminated** ("CHIPPED!" / "WORTH IT!"), including pests that spawn mid-downpour.
+3. A tally callout ("CHIP-NADO! 23 pests sorted!") and the announcer read out the damage.
+
+Chip kills don't recharge the gauge, and the charge carries over between waves and levels.
+
+## Voices
+
+Real spoken lines use the browser's built-in speech synthesis (no audio files), preferring a New Zealand English voice,
+then Australian, then British. Bazza, a stadium announcer (wave starts, level clears, super ready / results), the
+posh seagulls, giggly possums and the doom-voiced Grim Cutter each have their own pitch and pace. One line plays at a
+time, with the important ones taking priority. **V** toggles voices; **M** mutes everything. Devices without speech
+voices fall back to the gibberish blurt.
 
 ## Characters
 

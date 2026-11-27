@@ -1,5 +1,5 @@
 // Minimal DOM HUD. Reads sim state (never writes it); main.js forwards UI actions through callbacks.
-import { TRAPS, ENEMIES, WEAPONS, PLAYER, WAVES_PER_LEVEL } from './contracts.js';
+import { TRAPS, ENEMIES, WEAPONS, PLAYER, WAVES_PER_LEVEL, CHIPS } from './contracts.js';
 
 const ICON = { gull: '🐦', possum: '🐾', mower: '🚜' };
 
@@ -102,7 +102,7 @@ export function createHUD(root) {
     const P = S.player, W = S.waveDef;
     set('waveNo', `LVL ${S.level} · WAVE ${Math.min(S.wave + 1, WAVES_PER_LEVEL)}/${WAVES_PER_LEVEL}`);
     set('waveName', W.name);
-    const iq = Math.round(Math.min(0.9, Math.max(0, (S.level - 1) * 0.16 + S.wave * 0.03 - 0.04)) * 100);
+    const iq = Math.round(Math.min(0.9, Math.max(0, (S.level - 1) * 0.16 + S.wave * 0.015 - 0.04)) * 100);
     set('levelName', `${S.layout.name} · PEST IQ ${iq}${iq >= 50 ? ' 🧠' : ''}`);
     if (S.phase === 'build') {
       set('waveStatus', `Build time: <b>${Math.ceil(S.buildT)}s</b> — press <kbd>G</kbd> to send 'em early`, true);
@@ -159,6 +159,11 @@ export function createHUD(root) {
     els.damage.style.opacity = Math.max(dmgFlash, P.hp < 35 && !P.dead ? 0.35 + 0.15 * Math.sin(S.t * 6) : 0).toFixed(2);
     updateFloaters(dt, v.project);
     updateBubbles(dt, v.project);
+    const cf = Math.min(1, S.chipMeter / CHIPS.need), ready = cf >= 1 && !S.rain.active;
+    els.chipFill.style.height = (cf * 56).toFixed(1) + 'px';
+    els.chipGauge.classList.toggle('ready', ready);
+    set('chipText', S.rain.active ? 'POURING!' : ready ? 'READY! PRESS' : `RAIN OF CHIPS ${Math.floor(cf * 100)}%`);
+    els.rainOverlay.classList.toggle('on', S.rain.active);
     splatT = Math.max(0, splatT - dt);
     els.splat.style.opacity = Math.min(1, splatT / 1.2).toFixed(2);
   }

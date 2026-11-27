@@ -129,6 +129,14 @@ export function createAudio() {
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.15);
       o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(master); [o, o2, lfo].forEach((x) => { x.start(t); x.stop(t + 1.2); });
     },
+    chipsReady() { const t = now(); [784, 988, 1175, 1568].forEach((f, i) => tone('square', f, f, 0.12, 0.09, t + i * 0.08)); noise(0.6, 0.12, 'highpass', 3000, 6000, 0.5, t + 0.3); },
+    chipsCall() { // a rising whoosh + drumroll-into-cymbal for the wind-up
+      const t = now();
+      noise(1.3, 0.35, 'bandpass', 300, 4000, 1.5, t);
+      for (let i = 0; i < 14; i++) tone('triangle', 110, 90, 0.06, 0.12 + i * 0.012, t + i * 0.08);
+      noise(1.6, 0.45, 'highpass', 5000, 8000, 0.6, t + 1.15); tone('sine', 55, 40, 1.2, 0.5, t + 1.15);
+    },
+    chipThunk() { tone('sine', 380 + Math.random() * 200, 140, 0.09, 0.22); noise(0.06, 0.25, 'bandpass', 1800, 900, 2); },
     poosplat() { noise(0.25, 0.7, 'lowpass', 1800, 300, 1); tone('sine', 300, 80, 0.15, 0.3); },
     pop() { tone('sine', 900, 200, 0.06, 0.3); noise(0.04, 0.3, 'highpass', 2000, 2000, 1); },
     lose() { const t = now(); [392, 349, 311, 262].forEach((f, i) => tone('triangle', f, f * 0.97, 0.45, 0.15, t + i * 0.3)); },

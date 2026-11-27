@@ -434,13 +434,20 @@ export function createScene(canvas) {
   window.addEventListener('resize', resize);
   resize();
 
-  let t = 0;
+  let t = 0, goldK = 0;
+  const FOG0 = scene.fog.color.clone(), FOG_GOLD = new Color('#ffcf6a'), HEMI0 = hemi.color.clone(), HEMI_GOLD = new Color('#ffd27a'), SUN0 = sun.color.clone(), SUN_GOLD = new Color('#ffb84a');
   function update(dt, S) {
     t += dt;
     clouds.position.x = (t * 1.2) % 140;
     grassUniforms.uTime.value = t;
     water.material.uniforms.time.value = t * 0.35;
     if (S.layout !== current) buildLevel(S.layout);
+    // Rain of Chips: the whole sky goes golden while it pours
+    goldK += ((S.rain && S.rain.active ? 1 : 0) - goldK) * Math.min(1, dt * 3);
+    scene.fog.color.copy(FOG0).lerp(FOG_GOLD, goldK);
+    hemi.color.copy(HEMI0).lerp(HEMI_GOLD, goldK); hemi.intensity = 0.35 + goldK * 0.6;
+    sun.color.copy(SUN0).lerp(SUN_GOLD, goldK);
+    scene.fog.density = 0.0016 + goldK * 0.004;
     if (clothesline) clothesline.rotation.y += dt * 0.25;
     lanes.visible = S.phase === 'build';
     if (lanes.visible) laneMat.opacity = 0.35 + 0.25 * Math.sin(t * 4);

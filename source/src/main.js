@@ -14,6 +14,7 @@ import { createView } from './render/view.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
+import { createVoice } from './voice.js';
 import { CAMERA, TRAPS } from './contracts.js';
 
 const params = new URLSearchParams(location.search);
@@ -31,10 +32,12 @@ const sim = createSim({ seed: +(params.get('seed') || (Date.now() % 1e9)) }); //
 const fx = createFX(scene);
 const audio = createAudio();
 const hud = createHUD(uiRoot);
-const view = createView({ scene, camera, fx, audio, hud });
+const voice = createVoice();
+const view = createView({ scene, camera, fx, audio, hud, voice });
 const input = createInput(canvas);
 if (params.get('drag')) input.forceMode('drag');
 
+voice.setMuted(audio.muted);
 const ctl = { yaw: sim.state.layout.playerSpawn.yaw, pitch: 12, build: false, trap: 0, rot: 0 };
 let cmd = blankCmd();
 let state = 'title', overTimer = 0, place = null;
@@ -44,7 +47,7 @@ const fixed = createFixedStep({
   step: (h) => {
     sim.step(h, cmd);
     // edge-triggered actions are consumed by the first step that sees them
-    cmd.jump = cmd.dash = cmd.swap = cmd.place = cmd.sell = cmd.startWave = cmd.blow = false;
+    cmd.jump = cmd.dash = cmd.swap = cmd.place = cmd.sell = cmd.startWave = cmd.blow = cmd.chips = false;
   },
 });
 
@@ -104,6 +107,7 @@ uiRoot.addEventListener('click', (e) => {
   else if (a === 'music') audio.init(), audio.toggleMusic();
   else if (a === 'mode') input.forceMode(input.mode === 'lock' ? 'drag' : 'lock');
   else if (a === 'dismissHint') hud.dismissHint();
+  else if (a === 'chips' && state === 'playing') cmd.chips = true;
 });
 
 // ------------------------------------------------------------------ per-frame controller
@@ -112,7 +116,8 @@ const ndc = new Vector2();
 const camFwd = new Vector3();
 function handleKeys(inp) {
   const p = inp.pressed;
-  if (p.has('KeyM')) { audio.init(); audio.toggleMute(); }
+  if (p.has('KeyM')) { audio.init(); audio.toggleMute(); voice.setMuted(audio.muted); }
+  if (p.has('KeyV')) hud.toast(voice.toggle() ? (voice.available ? 'Voices on — gidday!' : 'Voices on (no speech voices found on this device — using gibberish)') : 'Voices off');
   if (p.has('KeyN')) { audio.init(); hud.toast(audio.toggleMusic() ? 'Music on — chur' : 'Music off'); }
   if (p.has('Backspace') && state !== 'title') { restart(); return; }
   if (state === 'over') { if (p.has('Enter') || p.has('NumpadEnter')) restart(); return; }
@@ -126,6 +131,7 @@ function handleKeys(inp) {
   if (p.has('KeyR')) ctl.rot = (ctl.rot + 1) % 12;
   if (p.has('KeyX') && ctl.build) cmd.sell = true;
   if (p.has('KeyG')) cmd.startWave = true;
+  if (p.has('KeyF')) cmd.chips = true;
   if (p.has('KeyQ')) cmd.swap = true;
   if (p.has('Space')) cmd.jump = true;
   if (p.has('ShiftLeft') || p.has('ShiftRight')) cmd.dash = true;
@@ -167,7 +173,9 @@ function frame(dt) {
     cmd.aimYaw = Math.atan2(-(h.x - S.player.x), -(h.z - S.player.z));
   } else cmd.aimYaw = ctl.yaw;
 
-  if (state === 'playing') fixed.advance(dt);
+  // dramatic slow-mo while the Rain of Chips is called in
+  const R = sim.state.rain, timeScale = R.active && R.t < 0.55 ? 0.3 : 1;
+  if (state === 'playing') fixed.advance(dt * timeScale);
   audio.setIntensity(S.phase === 'wave');
   audio.duck(state === 'paused' || state === 'over');
   place = ctl.build && state !== 'title' ? sim.queryPlacement(cmd.rayO, cmd.rayD, ctl.trap, ctl.rot) : null;
@@ -214,6 +222,6 @@ hud.show('title');
 audio.titleMusic(); // starts on the first click/key (browser autoplay rules)
 document.getElementById('boot').classList.add('done');
 setTimeout(() => document.getElementById('boot').remove(), 500);
-window.__game = { sim, input, ctl, view, audio, get state() { return state; }, startGame, restart, pause, resume, camera };
+window.__game = { sim, input, ctl, view, audio, voice, get state() { return state; }, startGame, restart, pause, resume, camera };
 if (params.get('autostart')) startGame();
 requestAnimationFrame(loop);

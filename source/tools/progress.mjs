@@ -25,18 +25,20 @@ function autoBuild() {
 function aim() {
   const P = S.player; let best = null, bd = 40;
   for (const e of S.enemies) { const d = Math.hypot(e.x - P.x, e.z - P.z); if (d < bd) { bd = d; best = e; } }
-  cmd.fire = false; if (!best) return;
+  cmd.fire = false; if (!best || process.argv.includes('--noshoot')) return;
   const o = { x: P.x, y: P.y + 1.6, z: P.z }, t = { x: best.x + best.vx * 0.3, y: best.y + 0.7, z: best.z + best.vz * 0.3 };
   const l = Math.hypot(t.x - o.x, t.y - o.y, t.z - o.z);
   cmd.rayO = o; cmd.rayD = { x: (t.x - o.x) / l, y: (t.y - o.y) / l, z: (t.z - o.z) / l }; cmd.aimYaw = Math.atan2(-(t.x - o.x), -(t.z - o.z)); cmd.fire = true;
 }
 let lastLevel = 0, steps = 0; const dodges = {};
-while (S.phase !== 'lost' && S.level <= 6 && steps < 60 * 60 * 40) {
+while (S.phase !== 'lost' && S.level <= 4 && steps < 60 * 60 * 60) {
   if (S.level !== lastLevel) { lastLevel = S.level; console.log(`LEVEL ${S.level}: ${S.layout.name} doors=${S.layout.doors.length} money=${S.money} fridge=${S.fridge} placed=${autoBuild()}`); }
   if (S.phase === 'build') { if (S.wave > 0 || S.buildT < 50) autoBuild(); cmd.startWave = true; } else cmd.startWave = false;
+  cmd.chips = S.chipMeter >= 40 && S.enemies.length >= 6;
   aim(); sim.step(1 / 60, cmd); steps++;
   for (const e of sim.drainEvents()) {
     if (e.type === 'dodge') dodges[e.kind] = (dodges[e.kind] || 0) + 1;
+    if (e.type === 'chipsEnd') dodges.CHIPS = (dodges.CHIPS || 0) + e.kills;
     if (e.type === 'waveClear') { console.log(`  wave ${S.wave} clear fridge=${S.fridge} money=${S.money} kills=${S.stats.kills} iq=${sim.iq.toFixed(2)} dodges=${JSON.stringify(dodges)}`); for (const k in dodges) delete dodges[k]; }
     if (e.type === 'levelStart') console.log(`  → refund ${e.refund}`);
     if (e.type === 'lost') console.log(`LOST on level ${S.level} wave ${S.wave + 1}`);

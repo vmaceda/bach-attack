@@ -39,8 +39,13 @@
     <div class="control-hint" data-bind="controlHint">
       <button class="x" data-act="dismissHint" aria-label="Dismiss">×</button>
       <div class="mode" data-bind="modeLine"></div>
-      <div class="keys">WASD move · Space jump · Shift dash · LMB fire · RMB/E blower · Q swap · B build · 1–8 traps · R rotate · X sell · G send wave · P/Esc pause · Tab free cursor · M mute · N music</div>
+      <div class="keys">WASD move · Space jump · Shift dash · LMB fire · RMB/E blower · Q swap · B build · 1–8 traps · R rotate · X sell · G send wave · P/Esc pause · Tab free cursor · M mute · N music · V voices · F Rain of Chips</div>
     </div>
+    <div class="chip-gauge" data-bind="chipGauge" data-act="chips" title="Rain of Chips (F)">
+      <div class="carton"><div class="fries"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="fill" data-bind="chipFill"></div><div class="box"><b>HOT</b><b>CHIPS</b></div></div>
+      <div class="chip-label"><span data-bind="chipText">RAIN OF CHIPS</span><kbd>F</kbd></div>
+    </div>
+    <div class="rain-overlay" data-bind="rainOverlay"><div class="rain-title">RAIN OF CHIPS!</div></div>
     <div class="damage-edge" data-bind="damage"></div>
     <div class="splat" data-bind="splat"><i></i><i></i><i></i><i></i><i></i><span>SPLAT! Seagull got ya, bro</span></div>
     <div class="speech-layer" data-bind="speech"></div>

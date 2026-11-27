@@ -1,6 +1,6 @@
 // View: mirrors sim.state into three.js objects every frame, runs the third-person camera rig (sphere-swept so walls
 // and beams push it in), and turns sim events into particles, sounds and HUD pops. Never mutates the sim.
-import { Vector3, Quaternion, Mesh, PlaneGeometry, BoxGeometry, MeshBasicMaterial, Group, ConeGeometry, BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, AdditiveBlending } from 'three';
+import { Vector3, Quaternion, Matrix4, Euler, InstancedMesh, MeshStandardMaterial, Mesh, PlaneGeometry, BoxGeometry, MeshBasicMaterial, Group, ConeGeometry, BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, AdditiveBlending } from 'three';
 import { makePlayer, ENEMY_MODEL, makeHealthBar, makeTrap, makeGhost, makeFlyingJandal } from './models.js';
 import { CAMERA, ENEMIES, TRAPS, TRAP_BY_ID } from '../contracts.js';
 import { sweepSphere } from '../sim/world.js';
@@ -13,7 +13,7 @@ const KILL_FX = {
 };
 const DIE_SFX = { gull: 'gullDie', possum: 'possumDie', mower: 'mowerDie' };
 
-export function createView({ scene, camera, fx, audio, hud }) {
+export function createView({ scene, camera, fx, audio, hud, voice }) {
   const player = makePlayer();
   player.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(player);
@@ -45,6 +45,14 @@ export function createView({ scene, camera, fx, audio, hud }) {
     }
     a.needsUpdate = true; l.userData.life = 0.16; l.visible = true;
   }
+
+  // ---- RAIN OF CHIPS: instanced golden fries tumbling out of the sky
+  const MAXCHIPS = 700;
+  const chipMesh = new InstancedMesh(new BoxGeometry(0.16, 0.16, 0.95), new MeshStandardMaterial({ color: '#f7c948', roughness: 0.5, emissive: '#7a5000', emissiveIntensity: 0.9 }), MAXCHIPS);
+  chipMesh.frustumCulled = false; chipMesh.castShadow = true; chipMesh.count = 0; scene.add(chipMesh);
+  const _m = new Matrix4(), _q = new Quaternion(), _e = new Euler(), _p = new Vector3(), _s = new Vector3(1, 1, 1);
+  const ANNOUNCE_END = (n) => n >= 20 ? `CHIP-NADO! ${n} pests sorted!` : n >= 8 ? `Sweet as! ${n} pests chipped!` : `${n} pest${n === 1 ? '' : 's'} chipped. Choice.`;
+  const announce = (text, pri = 3) => voice.say(text, 'announcer', pri);
 
   const cam = { pivot: new Vector3(14, 4, 2), dist: CAMERA.dist, kick: 0, recoil: 0, shake: 0, fwd: new Vector3(), right: new Vector3() };
   let t = 0, hitMark = 0, lastSquawk = 0;
@@ -126,7 +134,7 @@ export function createView({ scene, camera, fx, audio, hud }) {
     lastSpeech = t;
     const text = typeof list === 'string' ? list : list[Math.floor(Math.random() * list.length)];
     hud.speech(text, bazzaPos, 'bazza', 1.9);
-    audio.play('blurt', text.length, 0.3);
+    if (!voice.say(text, 'bazza', force ? 2 : 1)) audio.play('blurt', text.length, 0.3);
   }
 
   function syncPlayer(dt, S, ctl) {
@@ -160,8 +168,9 @@ export function createView({ scene, camera, fx, audio, hud }) {
     const busy = sp > 0.5 || S.t - P.firedT < 1.5 || S.t - P.blowT < 1 || ctl.build || P.dead || !P.onGround;
     BZ.idleT = busy ? 0 : BZ.idleT + dt;
     const anticT = BZ.idleT - 3;
-    const antic = anticT > 0 ? Math.floor(anticT / 4) % 3 : -1;
-    if (antic !== BZ.antic) { BZ.antic = antic; if (antic >= 0) bazzaSay(BAZZA_IDLE, true); }
+    const callIn = S.rain.active && S.rain.t < 2.2;
+    const antic = callIn ? 0 : anticT > 0 ? Math.floor(anticT / 4) % 3 : -1;
+    if (antic !== BZ.antic) { BZ.antic = antic; if (antic >= 0 && !callIn) bazzaSay(BAZZA_IDLE, true); }
     PP.gun.visible = antic < 0;
     let armRx = 0, armRz = 0, armLx = 0, armLz = 0, bodyY = 0;
     if (antic === 0) { // the dance
@@ -203,6 +212,7 @@ export function createView({ scene, camera, fx, audio, hud }) {
   function pestSay(e, text) {
     const id = e.id;
     hud.speech(text, () => { const v = enemies.get(id); return v ? { x: v.root.position.x, y: v.root.position.y + ENEMIES[v.type].height + 0.9, z: v.root.position.z } : null; }, 'pest', 1.7);
+    if (Math.random() < 0.45) voice.say(text, e.type, 0);
   }
 
   function syncEnemies(dt, S) {
@@ -440,9 +450,9 @@ export function createView({ scene, camera, fx, audio, hud }) {
           fx.emit(S.layout.goal.x, 1.5, S.layout.goal.z + 1, 14, { color: ['#7fe3ff', '#ffffff', '#5a2d0c'], speed: 4, life: 0.8, size: 0.2, gravity: 8 });
           break;
         }
-        case 'waveStart': audio.play('horn'); hud.banner(`WAVE ${e.wave + 1}: ${e.name.toUpperCase()}`, 'Here they come — chuck another snag on!', '#ffd21f'); break;
-        case 'levelClear': audio.play('win'); hud.banner(`LEVEL ${e.level} SORTED!`, 'Chucking the traps in the ute — new bach incoming…', '#4dff7a'); break;
-        case 'levelStart': audio.play('horn'); hud.banner(`LEVEL ${e.level}`, `${e.name}${S.layout.forks ? ' · watch the forks — they\'ll take the other path' : ''}`, '#ffd21f'); hud.toast(`Traps refunded: +${e.refund} shrapnel · fridge restocked from the dairy`); break;
+        case 'waveStart': audio.play('horn'); announce(`Wave ${e.wave + 1}. ${e.name}!`, 2); hud.banner(`WAVE ${e.wave + 1}: ${e.name.toUpperCase()}`, 'Here they come — chuck another snag on!', '#ffd21f'); break;
+        case 'levelClear': audio.play('win'); announce(`Level ${e.level} sorted! Chur!`, 3); hud.banner(`LEVEL ${e.level} SORTED!`, 'Chucking the traps in the ute — new bach incoming…', '#4dff7a'); break;
+        case 'levelStart': audio.play('horn'); announce(`Level ${e.level}. ${e.name}.`, 3); hud.banner(`LEVEL ${e.level}`, `${e.name}${S.layout.forks ? ' · watch the forks — they\'ll take the other path' : ''}`, '#ffd21f'); hud.toast(`Traps refunded: +${e.refund} shrapnel · fridge restocked from the dairy`); break;
         case 'waveClear': audio.play('clear'); hud.banner('WAVE CLEARED — CHUR!', `+${e.bonus} shrapnel · build up, then press G`, '#4dff7a'); break;
         case 'playerHurt': hud.hurt(); audio.play('hurt', null, 0.1); if (Math.random() < 0.5) bazzaSay(BAZZA_HURT); cam.shake = Math.max(cam.shake, 0.08); break;
         case 'playerDead': hud.toast('Munted by a pine cone. Respawning…', 'deny'); break;
@@ -482,6 +492,31 @@ export function createView({ scene, camera, fx, audio, hud }) {
           if (e.kind !== 'reroute' && Math.random() < 0.25) bazzaSay(['Oi, cheater!', 'They\'re learning!', 'Clever little...', 'That\'s not fair!']);
           break;
         }
+        case 'chipsReady':
+          audio.play('chipsReady');
+          hud.banner('RAIN OF CHIPS READY!', 'Press F (or click the chip box) to call it in', '#ffd21f');
+          if (!announce('Rain of chips is ready! Press F!')) bazzaSay('CHIPS ARE READY, BRO!', true);
+          break;
+        case 'chipsStart':
+          audio.play('chipsCall'); cam.shake = 0.35; cam.kick += 10;
+          hud.speech('IT\'S RAININ\' CHIPS!!!', bazzaPos, 'bazza', 2.6);
+          voice.say('Its raining chips!', 'bazza', 4) || audio.play('blurt', 20);
+          for (const m of S.enemies) if (Math.random() < 0.5) pestSay(m, m.type === 'gull' ? ['...chips?', 'CHIPS?!', 'Is that... CHIPS?'][Math.floor(Math.random() * 3)] : m.type === 'possum' ? ['Uh oh', 'Not the chips!', 'Mum?'][Math.floor(Math.random() * 3)] : ['NO... NOT LIKE THIS', 'CARBS?!'][Math.floor(Math.random() * 2)]);
+          break;
+        case 'chipHit': {
+          const m = S.enemies.find((q) => q.id === e.id);
+          hud.floater(e.etype === 'gull' ? 'WORTH IT!' : 'CHIPPED!', 'crit', e.x, e.y + 0.6, e.z);
+          fx.emit(e.x, e.y, e.z, 18, { color: ['#f7c948', '#ffe9a0', '#ffffff', '#e8302a'], speed: 6, up: 3, life: 0.7, size: 0.22, gravity: 9 });
+          audio.play('chipThunk', null, 0.03);
+          if (m && e.etype === 'gull' && Math.random() < 0.3) voice.say('worth it', 'gull', 0);
+          break;
+        }
+        case 'chipLand': fx.emit(e.x, e.y + 0.05, e.z, 3, { color: ['#f7c948', '#ffe9a0'], speed: 1.5, up: 1, life: 0.3, size: 0.1, gravity: 8 }); break;
+        case 'chipsEnd':
+          audio.play('win');
+          hud.callout(e.kills >= 20 ? 'CHIP-NADO!' : e.kills >= 8 ? 'SWEET AS!' : 'CHUR!', `Rain of Chips: ${e.kills} pests sorted`);
+          announce(ANNOUNCE_END(e.kills), 3);
+          break;
         case 'jump': audio.play('jump'); if (Math.random() < 0.35) bazzaSay(BAZZA_JUMP); break;
         case 'splat': hud.splat(); audio.play('poosplat'); bazzaSay(['Aw, MATE!', 'Right in the mullet!', 'Not again!', 'Is that... yep.'], true); break;
         case 'poopLaunch': audio.play('squawk', null, 0.2); if (Math.random() < 0.4) { const g = S.enemies.find((q) => q.id === e.id); if (g) pestSay(g, ['Bombs away!', 'Special delivery!', 'Incoming!', 'Hehe, gotcha'][Math.floor(Math.random() * 4)]); } break;
@@ -528,6 +563,16 @@ export function createView({ scene, camera, fx, audio, hud }) {
     syncEnemies(dt, S);
     syncTraps(dt, S);
     updateGhost(ctl, q);
+    // the chips themselves
+    const C = S.chips, n = Math.min(C.length, MAXCHIPS);
+    for (let i = 0; i < n; i++) {
+      const c = C[i];
+      _p.set(c.x, c.y, c.z); _q.setFromEuler(_e.set(c.spin, c.spin * 0.7, c.spin * 0.3)); _m.compose(_p, _q, _s);
+      chipMesh.setMatrixAt(i, _m);
+      if (i % 6 === 0 && Math.random() < 0.5) fx.emit(c.x, c.y + 0.4, c.z, 1, { color: ['#fff3b0', '#ffd21f'], speed: 0.2, life: 0.35, size: 0.18, gravity: 0, alpha: 0.8 });
+    }
+    chipMesh.count = n; chipMesh.instanceMatrix.needsUpdate = true;
+    if (S.rain.active && S.rain.t > 1.2) cam.shake = Math.max(cam.shake, 0.06);
     // background pest chatter: some random visible pest says something annoying every few seconds
     pestChat -= dt;
     if (pestChat <= 0 && S.enemies.length) {

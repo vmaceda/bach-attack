@@ -9,7 +9,7 @@
 // The renderer never mutates state; the controller only talks to the sim through cmd.
 import {
   PLAYER, WEAPONS, BLOWER, TRAPS, TRAP_TAG, WEAPON_TAG, ENEMIES, ECONOMY, PIT, SELL_REFUND, GRID, CALLOUTS,
-  WAVES_PER_LEVEL, waveFor,
+  WAVES_PER_LEVEL, waveFor, waveDifficulty, CHIPS,
 } from '../contracts.js';
 import { heightAt, collideCylinder, ceilingAt, raycast, solidAt, setLevelBoxes } from './world.js';
 import { classicLevel, generateLevel } from './levelgen.js';
@@ -29,7 +29,7 @@ export function blankCmd() {
   return {
     mx: 0, mz: 0, strafe: 0, aimYaw: 0, rayO: { x: 0, y: 2, z: 0 }, rayD: { x: 0, y: 0, z: -1 },
     fire: false, blow: false, jump: false, dash: false, swap: false,
-    build: false, trap: 0, rot: 0, place: false, sell: false, startWave: false,
+    build: false, trap: 0, rot: 0, place: false, sell: false, startWave: false, chips: false,
   };
 }
 
@@ -51,7 +51,8 @@ export function createSim({ seed = 4207 } = {}) {
         yaw: PLAYER_SPAWN.yaw, hp: PLAYER.hp, dead: false, respawnT: 0, dashT: 0, dashCd: 0, dashX: 0, dashZ: 0,
         fireCd: 0, blowCd: 0, weapon: 'fizz', lastHurt: -99, faceAimT: 0, moving: 0, firedT: -9, blowT: -9,
       },
-      enemies: [], traps: [], shots: [], cones: [], pickups: [], flyers: [],
+      enemies: [], traps: [], shots: [], cones: [], pickups: [], flyers: [], chips: [],
+      chipMeter: 0, rain: { active: false, t: 0, kills: 0, scatter: 0 },
       spawnQ: [], spawned: 0, waveTotal: 0,
       combo: { streak: 0, streakT: 0, best: 0, links: 0 },
       stats: { kills: 0, yeets: 0, combos: 0, leaks: 0 },
@@ -252,6 +253,11 @@ export function createSim({ seed = 4207 } = {}) {
     if (e.dead) return;
     e.dead = true;
     const D = ENEMIES[e.type];
+    // charge the Rain of Chips (chip kills don't count, or it would recharge itself)
+    if (how !== 'chips' && !S.rain.active && S.chipMeter < CHIPS.need) {
+      S.chipMeter = Math.min(CHIPS.need, S.chipMeter + CHIPS.points[e.type]);
+      if (S.chipMeter >= CHIPS.need) ev('chipsReady', {});
+    }
     S.money += D.bounty; S.stats.kills++;
     if (how === 'pit') S.stats.yeets++;
     if (e.chain.length >= 3) dropPickup(e.x, e.y + 0.8, e.z, 10 * e.chain.length);
@@ -486,7 +492,7 @@ export function createSim({ seed = 4207 } = {}) {
   const IQ_TYPE = { gull: { route: 0.8, jump: 1.15, dash: 1.1 }, possum: { route: 1.2, jump: 1.0, dash: 0.9 }, mower: { route: 0.6, jump: 0, dash: 0.4 } };
   const THREAT = { wet: 1, marmite: 1.2, sizzle: 2, jandal: 2.5, zapper: 2, gate: 2.5, catapult: 2.5, stomper: 2 };
   const FLOOR = new Set(['wet', 'marmite', 'sizzle', 'catapult']);
-  function iq() { return Math.min(0.9, Math.max(0, (S.level - 1) * 0.16 + S.wave * 0.03 - 0.04)); }
+  function iq() { return Math.min(0.9, Math.max(0, (S.level - 1) * 0.16 + S.wave * 0.015 - 0.04)); }
   function routeDanger(pts, from) {
     let d = 0;
     for (const tr of S.traps) {
@@ -695,6 +701,60 @@ export function createSim({ seed = 4207 } = {}) {
     }
   }
 
+  // ------------------------------------------------------------------ RAIN OF CHIPS
+  // Wind-up (Bazza calls it in, the sky goes gold), then hot chips pour from the sky: every pest gets a chip aimed at
+  // where it will be, plus a scatter of extras for the spectacle. Any chip that touches a pest eliminates it.
+  function startRain() {
+    if (S.rain.active) return;
+    if (S.chipMeter < CHIPS.need) { ev('deny', { text: `Rain of Chips not ready — sort ${Math.ceil((CHIPS.need - S.chipMeter))} more pest points` }); return; }
+    if (!S.enemies.length) { ev('deny', { text: 'No pests to chip, bro — save it!' }); return; }
+    S.chipMeter = 0;
+    S.rain = { active: true, t: 0, kills: 0, scatter: 0 };
+    for (const e of S.enemies) { e.chipT = 0; e.stunT = Math.max(e.stunT, CHIPS.windup + 0.4); e.awe = true; } // everyone stops and stares at the sky
+    ev('chipsStart', {});
+  }
+  function stepRain(h) {
+    const R = S.rain;
+    if (R.active) {
+      R.t += h;
+      if (R.t > CHIPS.windup) {
+        // aimed chips: one per pest (re-aimed if it missed / the pest moved)
+        for (const e of S.enemies) {
+          if (e.dead) continue;
+          e.chipT = (e.chipT || 0) - h;
+          if (e.chipT > 0) continue;
+          e.chipT = 0.7 + rng() * 0.3;
+          const H = 13 + rng() * 3, vy0 = -6, g = 26, tf = (-vy0 - Math.sqrt(vy0 * vy0 + 2 * g * H)) / -g;
+          const tx = e.x + e.vx * tf, tz = e.z + e.vz * tf;
+          S.chips.push({ x: tx + (rng() - 0.5) * 0.3, y: e.y + H, z: tz + (rng() - 0.5) * 0.3, vx: 0, vy: vy0, vz: 0, spin: rng() * 6 });
+        }
+        // the downpour: scatter over the whole yard
+        R.scatter += h * 70;
+        const A = S.layout.arena;
+        while (R.scatter >= 1) {
+          R.scatter--;
+          S.chips.push({ x: A.x0 + rng() * (A.x1 - A.x0), y: 12 + rng() * 6, z: A.z0 + rng() * (A.z1 - A.z0), vx: (rng() - 0.5) * 2, vy: -4 - rng() * 4, vz: (rng() - 0.5) * 2, spin: rng() * 6 });
+        }
+      }
+      if (R.t > CHIPS.windup + CHIPS.duration) { R.active = false; ev('chipsEnd', { kills: R.kills }); }
+    }
+    for (const c of S.chips) {
+      c.vy -= 26 * h; c.x += c.vx * h; c.y += c.vy * h; c.z += c.vz * h; c.spin += h * 12;
+      for (const e of S.enemies) {
+        if (e.dead) continue;
+        const D = ENEMIES[e.type];
+        if (Math.hypot(e.x - c.x, e.z - c.z) < D.radius + 0.45 && c.y > e.y - 0.3 && c.y < e.y + D.height + 0.6) {
+          R.kills++; c.dead = true;
+          ev('chipHit', { id: e.id, etype: e.type, x: e.x, y: e.y + D.height, z: e.z });
+          kill(e, 'chips');
+          break;
+        }
+      }
+      if (!c.dead && c.y < heightAt(c.x, c.z, c.y + 1, 0) + 0.02) { c.dead = true; if (rng() < 0.08) ev('chipLand', { x: c.x, y: c.y, z: c.z }); }
+    }
+    S.chips = S.chips.filter((c) => !c.dead);
+  }
+
   // ------------------------------------------------------------------ flying jandals
   function stepFlyers(h) {
     for (const f of S.flyers) {
@@ -796,6 +856,7 @@ export function createSim({ seed = 4207 } = {}) {
     S.t += h;
     // build / sell / wave control
     if (cmd.startWave) startWave();
+    if (cmd.chips) startRain();
     if (cmd.build && cmd.place && !S.player.dead) placeTrap(queryPlacement(cmd.rayO, cmd.rayD, cmd.trap, cmd.rot));
     if (cmd.build && cmd.sell) {
       const q = queryPlacement(cmd.rayO, cmd.rayD, cmd.trap, cmd.rot);
@@ -804,6 +865,7 @@ export function createSim({ seed = 4207 } = {}) {
     stepPlayer(h, cmd);
     stepTraps(h);
     stepEnemies(h);
+    stepRain(h);
     stepFlyers(h);
     stepShots(h);
     S.enemies = S.enemies.filter((e) => !e.dead);
@@ -836,7 +898,7 @@ export function createSim({ seed = 4207 } = {}) {
     for (const tr of S.traps) refund += tr.spent;
     for (const p of S.pickups) refund += p.v;
     S.money += refund;
-    S.traps = []; S.flyers = []; S.shots = []; S.cones = []; S.pickups = []; S.enemies = [];
+    S.traps = []; S.flyers = []; S.shots = []; S.cones = []; S.pickups = []; S.enemies = []; S.chips = []; S.rain.active = false;
     S.level++; S.wave = 0;
     S.layout = generateLevel(S.level, (rng() * 1e9) | 0);
     setLevelBoxes(S.layout.boxes);
@@ -850,7 +912,7 @@ export function createSim({ seed = 4207 } = {}) {
 
   // the upcoming wave is decided at the start of each build phase (deterministic per level seed) so the HUD can preview it
   function planWave() {
-    const d = (S.level - 1) * WAVES_PER_LEVEL + S.wave;
+    const d = waveDifficulty(S.level, S.wave);
     S.nextWave = waveFor(d, mulberry32((S.layout.seed * 31 + d * 977) | 0));
     S.waveDef = S.nextWave;
   }
