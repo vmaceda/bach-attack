@@ -14,7 +14,7 @@ import { createView } from './render/view.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
-import { createVoice } from './voice.js';
+import { createCommentator } from './commentator.js';
 import { CAMERA, TRAPS } from './contracts.js';
 
 const params = new URLSearchParams(location.search);
@@ -32,12 +32,12 @@ const sim = createSim({ seed: +(params.get('seed') || (Date.now() % 1e9)) }); //
 const fx = createFX(scene);
 const audio = createAudio();
 const hud = createHUD(uiRoot);
-const voice = createVoice();
-const view = createView({ scene, camera, fx, audio, hud, voice });
+const commentator = createCommentator({ onCall: (name, text) => hud.commentary(text, name) });
+const view = createView({ scene, camera, fx, audio, hud });
 const input = createInput(canvas);
 if (params.get('drag')) input.forceMode('drag');
 
-voice.setMuted(audio.muted);
+commentator.setMuted(audio.muted);
 const ctl = { yaw: sim.state.layout.playerSpawn.yaw, pitch: 12, build: false, trap: 0, rot: 0 };
 let cmd = blankCmd();
 let state = 'title', overTimer = 0, place = null;
@@ -76,7 +76,7 @@ function resume() {
   input.requestLock();
 }
 function restart() {
-  sim.reset(); view.reset(); fixed.reset();
+  sim.reset(); view.reset(); fixed.reset(); commentator.reset();
   cmd = blankCmd();
   Object.assign(ctl, { yaw: sim.state.layout.playerSpawn.yaw, pitch: 12, build: false, trap: 0, rot: 0 });
   overTimer = 0;
@@ -116,8 +116,8 @@ const ndc = new Vector2();
 const camFwd = new Vector3();
 function handleKeys(inp) {
   const p = inp.pressed;
-  if (p.has('KeyM')) { audio.init(); audio.toggleMute(); voice.setMuted(audio.muted); }
-  if (p.has('KeyV')) hud.toast(voice.toggle() ? (voice.available ? 'Voices on — gidday!' : 'Voices on (no speech voices found on this device — using gibberish)') : 'Voices off');
+  if (p.has('KeyM')) { audio.init(); audio.toggleMute(); commentator.setMuted(audio.muted); }
+  if (p.has('KeyV')) hud.toast(commentator.toggle() ? 'Commentator on' : 'Commentator off');
   if (p.has('KeyN')) { audio.init(); hud.toast(audio.toggleMusic() ? 'Music on — chur' : 'Music off'); }
   if (p.has('Backspace') && state !== 'title') { restart(); return; }
   if (state === 'over') { if (p.has('Enter') || p.has('NumpadEnter')) restart(); return; }
@@ -178,10 +178,12 @@ function frame(dt) {
   if (state === 'playing') fixed.advance(dt * timeScale);
   audio.setIntensity(S.phase === 'wave');
   audio.duck(state === 'paused' || state === 'over');
+  commentator.duck(state === 'paused');
   place = ctl.build && state !== 'title' ? sim.queryPlacement(cmd.rayO, cmd.rayD, ctl.trap, ctl.rot) : null;
 
   const events = sim.drainEvents();
   view.handle(events, S);
+  for (const e of events) commentator.onEvent(e, S.t); // game time, so bursts respect slow-mo and frame rate
   for (const e of events) {
     if (e.type === 'lost') { overTimer = 1.6; audio.play('lose'); hud.gameOver(S); }
     if (e.type === 'levelStart') { audio.levelMusic(); ctl.yaw = S.layout.playerSpawn.yaw; ctl.pitch = 14; ctl.build = false; }
@@ -222,6 +224,6 @@ hud.show('title');
 audio.titleMusic(); // starts on the first click/key (browser autoplay rules)
 document.getElementById('boot').classList.add('done');
 setTimeout(() => document.getElementById('boot').remove(), 500);
-window.__game = { sim, input, ctl, view, audio, voice, get state() { return state; }, startGame, restart, pause, resume, camera };
+window.__game = { sim, input, ctl, view, audio, commentator, get state() { return state; }, startGame, restart, pause, resume, camera };
 if (params.get('autostart')) startGame();
 requestAnimationFrame(loop);

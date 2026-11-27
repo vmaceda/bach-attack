@@ -6,7 +6,7 @@
   "type": "module",
   "description": "BACH ATTACK! \u2014 single-file third-person trap-defence game (three.js, esbuild one-file build)",
   "scripts": {
-    "build": "node build.mjs && cp dist/index.html ../index.html && mkdir -p dist/music && cp ../music/*.mp3 dist/music/",
+    "build": "node build.mjs && cp dist/index.html ../index.html && mkdir -p dist/music dist/sfx && cp ../music/*.mp3 dist/music/ && cp ../sfx/*.mp3 dist/sfx/",
     "build:readable": "node build.mjs --readable",
     "soak": "node tools/soak.mjs",
     "balance": "node tools/balance.mjs 4207 --shoot",

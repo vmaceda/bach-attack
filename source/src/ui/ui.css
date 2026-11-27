@@ -147,6 +147,12 @@ button { font-family: inherit; }
 .rain-overlay .rain-title { position: absolute; top: 24%; width: 100%; text-align: center; font: clamp(48px, 9vw, 110px) var(--font-display); color: #ffe14a; letter-spacing: 3px; text-shadow: 0 6px 0 #b5452e, 0 0 40px #ffb000; transform: scale(.4) rotate(-6deg); opacity: 0; }
 .rain-overlay.on { opacity: 1; } .rain-overlay.on .rain-title { animation: raintitle 2.2s ease-out forwards; }
 @keyframes raintitle { 0% { opacity: 0; transform: scale(.3) rotate(-10deg); } 15% { opacity: 1; transform: scale(1.2) rotate(-3deg); } 25% { transform: scale(1) rotate(-2deg); } 80% { opacity: 1; } 100% { opacity: 0; transform: scale(1.05) translateY(-30px) rotate(-2deg); } }
+.commentary { position: absolute; top: 9%; left: 0; right: 0; text-align: center; font: clamp(36px, 6vw, 72px) var(--font-display); letter-spacing: 3px; color: #ff3a2a;
+  text-shadow: 0 4px 0 #2a0a0a, 0 0 24px rgba(255,80,40,.7); opacity: 0; pointer-events: none; white-space: nowrap; }
+.commentary[data-clip="multi-kill"] { color: #ff8a1a; } .commentary[data-clip="unstoppable"] { color: #ffd21f; }
+.commentary[data-clip="dominating"] { color: #c86bff; } .commentary[data-clip="you-have-won-the-match"] { color: #4dff7a; }
+.commentary.show { animation: slam 1.9s ease-out forwards; }
+@keyframes slam { 0% { opacity: 0; transform: scale(2.6); } 10% { opacity: 1; transform: scale(.95); } 16% { transform: scale(1.04); } 22% { transform: scale(1); } 78% { opacity: 1; } 100% { opacity: 0; transform: scale(1) translateY(-14px); } }
 .noscript { position: fixed; inset: 0; display: grid; place-content: center; }
 @media (max-width: 1150px) { .hotbar .slot { width: 70px; } .slot .n { font-size: 11px; } .player-panel { min-width: 200px; } }
 @media (max-width: 900px) { .hotbar .slot { width: 62px; } .slot .m { display: none; } .control-hint { display: none; } .callout { font-size: 44px; } }

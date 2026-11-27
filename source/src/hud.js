@@ -92,6 +92,13 @@ export function createHUD(root) {
       b.el.style.opacity = Math.min(1, b.life * 3);
     }
   }
+  // commentator call-out: big slammed text across the top centre
+  let comT = 0;
+  function commentary(text, name) {
+    const el = els.commentary;
+    el.textContent = text; el.dataset.clip = name;
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  }
   let splatT = 0;
   function splat() { splatT = 3.2; for (const i of els.splat.querySelectorAll('i')) i.style.transform = `rotate(${Math.random() * 360}deg) scale(${0.8 + Math.random() * 0.5})`; }
 
@@ -176,5 +183,5 @@ export function createHUD(root) {
     set('overStats', `<span>Level reached</span><b>${S.level}</b><span>Best level ever</span><b>${best}</b><span>Waves survived</span><b>${(S.level - 1) * WAVES_PER_LEVEL + S.wave}</b><span>Pests sorted</span><b>${S.stats.kills}</b><span>Yeeted into the compost</span><b>${S.stats.yeets}</b><span>Trap combos</span><b>${S.stats.combos}</b><span>Best combo streak</span><b>${S.combo.best}</b><span>Beers left</span><b>${S.fridge}</b>`, true);
   }
 
-  return { show, callout, banner, toast, floater, hurt, update, gameOver, speech, splat, els, slots, dismissHint() { els.controlHint.classList.toggle('mini'); } };
+  return { show, callout, banner, toast, floater, hurt, update, gameOver, speech, splat, commentary, els, slots, dismissHint() { els.controlHint.classList.toggle('mini'); } };
 }

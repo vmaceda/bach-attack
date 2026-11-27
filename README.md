@@ -4,7 +4,7 @@ A third-person shooter trap-defence game set in a suburban Kiwi bach. Seagulls, 
 are after the beers in the bach fridge. You have wet decking, flying jandals, a sausage sizzle, Marmite and a No. 8 wire
 farm gate to stop them.
 
-**`index.html` is the whole game:** one ~755 KB file (~212 KB gzipped), plus the optional `music/` folder (~8 MB of MP3s). The game file itself has no CDN, no asset files and no `data:` blobs.
+**`index.html` is the whole game:** one ~755 KB file (~212 KB gzipped), plus the optional `music/` (~8 MB) and `sfx/` (commentator, ~50 KB) folders of MP3s. The game file itself has no CDN, no asset files and no `data:` blobs.
 It follows the same model as WHITEOUT: three.js r180 is bundled by esbuild into a single HTML file, every texture is
 drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 
@@ -20,7 +20,7 @@ drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 | Build | B toggles build mode. 1–8 select a trap (and enter build mode); the mouse wheel cycles traps. LMB places, R rotates directional traps, X or RMB sells for an 80 % refund (between waves only) |
 | Waves | G starts the next wave early, with bonus shrapnel for the time left on the build timer |
 | Super | F calls in the Rain of Chips when the hot chips gauge is full |
-| Meta | P or Esc pauses · Tab frees the cursor without pausing · M mutes everything · N toggles the music · V toggles voices · Backspace restarts instantly · Enter restarts from the end screen |
+| Meta | P or Esc pauses · Tab frees the cursor without pausing · M mutes everything · N toggles the music · V toggles the commentator · Backspace restarts instantly · Enter restarts from the end screen |
 
 ## Endless random levels
 
@@ -51,13 +51,22 @@ carton) calls it in:
 
 Chip kills don't recharge the gauge, and the charge carries over between waves and levels.
 
-## Voices
+## Commentator
 
-Real spoken lines use the browser's built-in speech synthesis (no audio files), preferring a New Zealand English voice,
-then Australian, then British. Bazza, a stadium announcer (wave starts, level clears, super ready / results), the
-posh seagulls, giggly possums and the doom-voiced Grim Cutter each have their own pitch and pace. One line plays at a
-time, with the important ones taking priority. **V** toggles voices; **M** mutes everything. Devices without speech
-voices fall back to the gibberish blurt.
+Recorded call-outs in `sfx/` (next to `index.html`), each played at the moment its file name describes:
+
+| Clip | When |
+|---|---|
+| `double-kill.mp3` | 2 pests sorted within 1.6 s of each other |
+| `multi-kill.mp3` | 3–5 pests in one burst |
+| `unstoppable.mp3` | 6+ pests in one burst, or a Rain of Chips that sorts 10+ |
+| `dominating.mp3` | 25 pests in a row without losing a beer, or 3 waves in a row cleared with no beers lost |
+| `you-have-won-the-match.mp3` | clearing a level (all 10 waves) |
+
+Kills from traps, weapons, the compost gully and the Rain of Chips all count. One clip plays at a time; a bigger moment
+cuts off a smaller one, never the other way round. Each call-out also slams its text across the top of the screen.
+**V** toggles the commentator; **M** mutes everything. Bazza and the pests still chatter in speech bubbles with the
+gibberish blurt voice.
 
 ## Characters
 
@@ -172,7 +181,8 @@ src/
     post.js         EffectComposer: GTAO, bloom, colour grade, OutputPass, quality governor
     view.js         state → meshes sync, TPS camera rig (swept shoulder + boom), events → FX/audio/HUD
   input.js          Pointer Lock + drag-orbit fallback, keyboard, edge-triggered presses
-  audio.js          procedural Web Audio SFX + mower drone + surf ambience, mute
+  audio.js          procedural Web Audio SFX + soundtrack jukebox + mower drone + surf ambience, mute
+  commentator.js    recorded commentator call-outs (sfx/*.mp3) picked from kill bursts, streaks and level wins
   hud.js            DOM HUD: wave panel and preview, shrapnel, fridge bar, hotbar, callouts, floaters, control hint
   main.js           controller: input → cmd → sim.step (60 Hz) → events → view/hud/audio; state machine
 tools/  soak.mjs · balance.mjs · newtraps.mjs · levels.mjs · progress.mjs (headless sims) · charshot.mjs · jandalshot.mjs · smoke.mjs · camtest.mjs · ghosttest.mjs · poses.mjs (Playwright)
