@@ -120,6 +120,15 @@ export function createAudio() {
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.03); g.gain.setValueAtTime(0.22, t + 0.38); g.gain.exponentialRampToValueAtTime(0.06, t + 0.41); g.gain.exponentialRampToValueAtTime(0.2, t + 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.62);
       o.connect(lp); lp.connect(g); g.connect(master); o.start(t); o.stop(t + 0.65);
     },
+    roar() { // the Grim Cutter revs: a growling engine with a demonic downward howl
+      const t = now(), o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+      o.type = 'sawtooth'; o2.type = 'square'; o.frequency.setValueAtTime(55, t); o.frequency.linearRampToValueAtTime(110, t + 0.35); o.frequency.linearRampToValueAtTime(40, t + 1.1);
+      o2.frequency.setValueAtTime(82, t); o2.frequency.linearRampToValueAtTime(160, t + 0.35); o2.frequency.linearRampToValueAtTime(58, t + 1.1);
+      lfo.frequency.value = 28; lg.gain.value = 18; lfo.connect(lg); lg.connect(o.frequency); lg.connect(o2.frequency);
+      lp.type = 'lowpass'; lp.frequency.setValueAtTime(400, t); lp.frequency.linearRampToValueAtTime(1400, t + 0.35); lp.frequency.linearRampToValueAtTime(300, t + 1.1);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.3, t + 0.08); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.15);
+      o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(master); [o, o2, lfo].forEach((x) => { x.start(t); x.stop(t + 1.2); });
+    },
     poosplat() { noise(0.25, 0.7, 'lowpass', 1800, 300, 1); tone('sine', 300, 80, 0.15, 0.3); },
     pop() { tone('sine', 900, 200, 0.06, 0.3); noise(0.04, 0.3, 'highpass', 2000, 2000, 1); },
     lose() { const t = now(); [392, 349, 311, 262].forEach((f, i) => tone('triangle', f, f * 0.97, 0.45, 0.15, t + i * 0.3)); },

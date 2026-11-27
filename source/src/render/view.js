@@ -147,7 +147,8 @@ export function createView({ scene, camera, fx, audio, hud }) {
     BZ.bellyV += (-BZ.belly * 140 - BZ.bellyV * 4 + (dvy < -30 ? 0 : -dvy * 0.02) + Math.sin(ph * 2) * sw * 10) * dt;
     BZ.belly += BZ.bellyV * dt; BZ.belly = Math.max(-0.25, Math.min(0.25, BZ.belly));
     PP.belly.scale.set(1 - BZ.belly * 0.5, 1 + BZ.belly, 1 - BZ.belly * 0.3);
-    PP.mullet.rotation.x = 0.25 - BZ.headX * 1.5 + sw * 0.3 * Math.sin(ph * 2 + 1);
+    PP.mullet.rotation.x = -BZ.headX * 0.8 + sw * 0.12 * Math.sin(ph * 2 + 1);
+    for (let i = 0; i < PP.corks.length; i++) { const c = PP.corks[i]; c.rotation.x = Math.sin(t * 7 + i * 1.7) * (0.15 + sw * 0.6) - BZ.headX * 2; c.rotation.z = Math.cos(t * 6 + i) * (0.1 + sw * 0.5) - BZ.headZ * 2; }
     wobbleEyes(PP.eyes, -dyaw / Math.max(dt, 1e-3) * 2 + acc * 0.1, -dvy * 0.08, dt);
     // idle antics (dance / belly drum / bubble gum) after 3 s of doing nothing
     const busy = sp > 0.5 || S.t - P.firedT < 1.5 || S.t - P.blowT < 1 || ctl.build || P.dead || !P.onGround;
@@ -186,9 +187,9 @@ export function createView({ scene, camera, fx, audio, hud }) {
 
   // ---- pests talk too. Constantly.
   const PEST_LINES = {
-    gull: ['MINE!', 'MINE! MINE!', 'Chips?', 'Oi, gimme a chip', 'Squawk off, bro', 'You gonna eat that?', 'Hot chips or riot!'],
-    possum: ['Heh heh heh', 'Yoink!', 'Smells like pie', 'Nice mullet lol', 'Catch, bro!', 'Pest? I prefer "guest"'],
-    mower: ['VROOOOM', 'LAWN AND ORDER!', 'MOW-HAWK!', 'I\'M CUTTING THROUGH!', 'GRASS IS ALWAYS GREENER!', 'HONK HONK'],
+    gull: ['MINE!', 'Indeed. MINE.', 'Cheers for the tinny, old sport', 'Hot chips? Splendid. MINE.', 'One does love a bach fridge', 'Squawk off, bro', 'Monocle says: MINE.'],
+    possum: ['Heh heh heh', 'Yoink!', 'Into the swag!', 'Nice stuff ya got there', 'Don\'t mind me...', 'Mine now, bro', 'Is that a pie? IN THE SACK'],
+    mower: ['I AM THE GRIM CUTTER', 'YOUR LAWN IS MINE', 'MOW... THEM... ALL', 'LAWN AND ORDER!', 'BOW BEFORE THE BLADES', 'NO BLADE OF GRASS IS SAFE'],
   };
   const TAUNT = ['GOT YA BRO!', 'Hehehe, sucked in!', 'Bullseye!', 'Pine cone to the face!'];
   let pestChat = 3;
@@ -241,13 +242,21 @@ export function createView({ scene, camera, fx, audio, hud }) {
         const throwP = e.mode === 'shoot' ? Math.max(0, 1 - (ENEMIES.possum.every - e.shootT) * 3) : 0;
         Pp.arm.rotation.x = e.mode === 'shoot' ? -2.4 + (1 - Math.min(1, e.shootT)) * 2 : 0;
         Pp.cone.visible = e.mode !== 'shoot' || e.shootT < ENEMIES.possum.every - 0.4;
+        if (Pp.hook) Pp.hook.rotation.y = t * 9 + e.id; // twirling the grappling hook
       } else {
         for (const w of Pp.wheels) w.rotation.x = -v.roll * 3;
         Pp.blade.rotation.y = t * 40;
         const hk = v.honk = Math.max(0, (v.honk || 0) - dt * 3);
         Pp.horn.scale.set(1 + hk * 0.6, 1 + hk * 0.6, 1 - hk * 0.4);
         Pp.body.position.y = Math.sin(t * 45) * 0.012;
-        if (Math.random() < dt * 6) fx.emit(e.x + Math.sin(e.yaw) * -0.3, e.y + 1.5, e.z, 1, { color: ['#555555', '#777777'], speed: 0.6, life: 1.2, size: 0.35, gravity: -1.5, grow: 0.6 });
+        // twin exhausts belching black smoke, with the odd spurt of flame
+        const cy = Math.cos(e.yaw), sy = Math.sin(e.yaw);
+        for (const ex of [-0.45, 0.45]) {
+          const wx = e.x + ex * cy + 0.35 * sy, wz = e.z - ex * sy + 0.35 * cy;
+          if (Math.random() < dt * 9) fx.emit(wx, e.y + 1.9, wz, 1, { color: ['#1a1a1a', '#2a2a2a', '#3a3a3a'], speed: 0.7, up: 1.2, life: 1.6, size: 0.45, gravity: -1.2, grow: 0.9, alpha: 0.85 });
+          if (Math.random() < dt * 1.2) fx.emit(wx, e.y + 1.9, wz, 4, { color: ['#ff5a1a', '#ffb43a'], speed: 1.2, up: 2, life: 0.3, size: 0.25, gravity: -2 });
+        }
+        if (Math.random() < dt * 4) fx.emit(e.x + (Math.random() - 0.5), e.y + 0.15, e.z + (Math.random() - 0.5), 2, { color: ['#ffb43a', '#ff7a1a'], speed: 2.5, up: 1, life: 0.25, size: 0.08, gravity: 6 }); // blade sparks
       }
       if (e.burnT > 0 && Math.random() < dt * 25) fx.emit(e.x, e.y + D.height * 0.6, e.z, 1, { color: ['#ff7a1a', '#ffd23a', '#ff3a1a'], speed: 1, life: 0.5, size: 0.25, gravity: -3 });
       if (e.mar && Math.random() < dt * 8) fx.emit(e.x, e.y + 0.1, e.z, 1, { color: '#2c1606', speed: 0.6, life: 0.6, size: 0.18, gravity: 4 });
@@ -426,7 +435,7 @@ export function createView({ scene, camera, fx, audio, hud }) {
         }
         case 'waveStart': audio.play('horn'); hud.banner(`WAVE ${e.wave + 1}: ${e.name.toUpperCase()}`, 'Here they come — chuck another snag on!', '#ffd21f'); break;
         case 'levelClear': audio.play('win'); hud.banner(`LEVEL ${e.level} SORTED!`, 'Chucking the traps in the ute — new bach incoming…', '#4dff7a'); break;
-        case 'levelStart': audio.play('horn'); hud.banner(`LEVEL ${e.level}`, e.name, '#ffd21f'); hud.toast(`Traps refunded: +${e.refund} shrapnel · fridge restocked from the dairy`); break;
+        case 'levelStart': audio.play('horn'); hud.banner(`LEVEL ${e.level}`, `${e.name}${S.layout.forks ? ' · watch the forks — they\'ll take the other path' : ''}`, '#ffd21f'); hud.toast(`Traps refunded: +${e.refund} shrapnel · fridge restocked from the dairy`); break;
         case 'waveClear': audio.play('clear'); hud.banner('WAVE CLEARED — CHUR!', `+${e.bonus} shrapnel · build up, then press G`, '#4dff7a'); break;
         case 'playerHurt': hud.hurt(); audio.play('hurt', null, 0.1); if (Math.random() < 0.5) bazzaSay(BAZZA_HURT); cam.shake = Math.max(cam.shake, 0.08); break;
         case 'playerDead': hud.toast('Munted by a pine cone. Respawning…', 'deny'); break;
@@ -456,10 +465,20 @@ export function createView({ scene, camera, fx, audio, hud }) {
         case 'land': fx.emit(e.x, e.y + 0.1, e.z, e.etype === 'mower' ? 14 : 6, { color: ['#c8b89a', '#8a7a5a'], speed: 2.5, life: 0.6, size: 0.35, gravity: 1, grow: 0.5, alpha: 0.6 }); break;
         case 'jandalHit': audio.play('slap', null, 0.04); hud.floater('SLAP!', 'trap', e.x, e.y + 0.6, e.z); fx.emit(e.x, e.y, e.z, 10, { color: ['#ffffff', '#2f6ff0'], speed: 4, life: 0.4, size: 0.15, gravity: 5 }); cam.shake = Math.max(cam.shake, 0.04); break;
         case 'jandalLand': audio.play('thud', null, 0.08); fx.emit(e.x, e.y + 0.05, e.z, 6, { color: ['#c8b89a', '#8a7a5a'], speed: 1.5, life: 0.5, size: 0.3, gravity: 1, grow: 0.4, alpha: 0.6 }); break;
+        case 'dodge': {
+          const lines = { swoop: ['MIIIINE!', 'Tally-ho!', 'Swooping in!'], jump: ['Nice try!', 'Hup!', 'Too slow, bro', 'Parkour!'], step: ['Nah yeah, nah', 'Saw that coming', 'Not today!'], dash: ['YOINK!', 'Missed me!', 'Ha!'], reroute: ['Other way, lads!', 'Shortcut!', 'Nah, round the back'] }[e.kind];
+          const label = { swoop: 'SWOOP!', jump: 'JUMPED!', step: 'SIDESTEP!', dash: 'DODGED!', reroute: 'REROUTE!' }[e.kind];
+          hud.floater(label, 'yeet', e.x, e.y + 1.8, e.z);
+          const m = S.enemies.find((q) => q.id === e.id);
+          if (m && (e.kind !== 'reroute' || Math.random() < 0.5)) pestSay(m, lines[Math.floor(Math.random() * lines.length)]);
+          audio.play(e.kind === 'jump' ? 'jump' : 'dash', null, 0.15);
+          if (e.kind !== 'reroute' && Math.random() < 0.25) bazzaSay(['Oi, cheater!', 'They\'re learning!', 'Clever little...', 'That\'s not fair!']);
+          break;
+        }
         case 'jump': audio.play('jump'); if (Math.random() < 0.35) bazzaSay(BAZZA_JUMP); break;
         case 'splat': hud.splat(); audio.play('poosplat'); bazzaSay(['Aw, MATE!', 'Right in the mullet!', 'Not again!', 'Is that... yep.'], true); break;
         case 'poopLaunch': audio.play('squawk', null, 0.2); if (Math.random() < 0.4) { const g = S.enemies.find((q) => q.id === e.id); if (g) pestSay(g, ['Bombs away!', 'Special delivery!', 'Incoming!', 'Hehe, gotcha'][Math.floor(Math.random() * 4)]); } break;
-        case 'honk': { audio.play('awooga', null, 0.4); const v = enemies.get(e.id); if (v) v.honk = 1; const m = S.enemies.find((q) => q.id === e.id); if (m && Math.random() < 0.5) pestSay(m, PEST_LINES.mower[Math.floor(Math.random() * PEST_LINES.mower.length)]); break; }
+        case 'honk': { audio.play('roar', null, 0.4); const v = enemies.get(e.id); if (v) v.honk = 1; const m = S.enemies.find((q) => q.id === e.id); if (m && Math.random() < 0.5) pestSay(m, PEST_LINES.mower[Math.floor(Math.random() * PEST_LINES.mower.length)]); break; }
         case 'taunt': { audio.play('giggle', null, 0.3); const m = S.enemies.find((q) => q.id === e.id); if (m) pestSay(m, TAUNT[Math.floor(Math.random() * TAUNT.length)]); break; }
         case 'dash': audio.play('dash'); fx.emit(e.x, e.y + 0.3, e.z, 10, { color: ['#ffffff', '#c8d8e8'], speed: 2, life: 0.4, size: 0.3, gravity: 0, alpha: 0.6 }); break;
         case 'swap': audio.play('swap'); hud.toast(e.w === 'pie' ? 'Mince Pie Launcher — splash damage, big arc' : 'L&P Fizz Cannon — aim high for cracker shots'); break;

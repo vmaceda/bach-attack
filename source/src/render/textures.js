@@ -171,6 +171,54 @@ export const TEX = {
       g.fillText(l, s / 2, s * (0.5 + (i - (n - 1) / 2) / (n + 0.8)), s * 0.84);
     });
   }, 4),
+  // sun-tanned skin with ink: a silver fern up the arm and koru swirls
+  tattooSkin: () => make('tattoo', 256, (g, sz) => {
+    g.fillStyle = '#c98a62'; g.fillRect(0, 0, sz, sz);
+    speckle(g, sz, 900, ['rgba(120,60,30,0.10)', 'rgba(255,220,190,0.08)'], 1, 3);
+    g.strokeStyle = 'rgba(30,40,45,0.78)'; g.lineWidth = 3; g.lineCap = 'round';
+    for (const cx of [64, 192]) { // fern frond running along the arm (u wraps round, v runs along)
+      g.beginPath(); g.moveTo(cx, 20); g.quadraticCurveTo(cx + 10, 128, cx - 4, 236); g.stroke();
+      for (let i = 0; i < 12; i++) { const y = 30 + i * 17, l = 22 - Math.abs(i - 6) * 1.8; g.beginPath(); g.moveTo(cx + 3, y); g.quadraticCurveTo(cx + l * 0.6, y - 6, cx + l, y - 2); g.stroke(); g.beginPath(); g.moveTo(cx + 3, y); g.quadraticCurveTo(cx - l * 0.6, y - 6, cx - l, y - 2); g.stroke(); }
+    }
+    for (const [x, y] of [[128, 60], [128, 180], [20, 128], [236, 128]]) { g.beginPath(); for (let a = 0; a < 12; a += 0.2) { const r = 2 + a * 1.6; g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } g.stroke(); }
+  }),
+  burlap: (text) => make('burlap' + text, 256, (g, sz) => {
+    g.fillStyle = '#a8865a'; g.fillRect(0, 0, sz, sz);
+    for (let i = 0; i < sz; i += 4) { g.fillStyle = i % 8 ? 'rgba(80,55,25,0.25)' : 'rgba(230,200,150,0.18)'; g.fillRect(i, 0, 2, sz); g.fillRect(0, i, sz, 2); }
+    speckle(g, sz, 500, ['rgba(60,40,20,0.3)', 'rgba(200,170,120,0.3)'], 1, 4);
+    g.fillStyle = '#7a5a3a'; g.fillRect(150, 30, 60, 50); g.fillStyle = '#8a6a48'; g.fillRect(30, 170, 50, 45); // patches
+    if (text) { g.fillStyle = 'rgba(40,25,10,0.85)'; g.font = '900 64px Impact, "Arial Black", sans-serif'; g.textAlign = 'center'; g.fillText(text, sz / 2, sz / 2 + 22); }
+  }),
+  ironRunes: () => make('iron', 256, (g, sz) => {
+    g.fillStyle = '#3a3c40'; g.fillRect(0, 0, sz, sz);
+    speckle(g, sz, 1600, ['#2a2b2e', '#4a4c50', '#5a3a28', '#6b4128'], 1, 5);
+    g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 3; g.strokeRect(6, 6, sz - 12, sz / 2 - 8); g.strokeRect(6, sz / 2 + 2, sz - 12, sz / 2 - 8);
+    g.fillStyle = '#1a1a1a'; for (const [x, y] of [[14, 14], [sz - 18, 14], [14, sz - 18], [sz - 18, sz - 18], [14, sz / 2 + 10], [sz - 18, sz / 2 + 10]]) { g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); }
+  }),
+  runeGlow: () => make('runeGlow', 256, (g, sz) => {
+    g.fillStyle = '#000'; g.fillRect(0, 0, sz, sz);
+    g.strokeStyle = '#ff3a1a'; g.lineWidth = 3; g.shadowColor = '#ff2a00'; g.shadowBlur = 8;
+    for (let i = 0; i < 9; i++) { const x = 30 + (i % 3) * 80 + rnd() * 20, y = 30 + Math.floor(i / 3) * 80 + rnd() * 20; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 10, y + 26); g.lineTo(x + 20, y); g.moveTo(x + 4, y + 12); g.lineTo(x + 16, y + 12); g.stroke(); }
+    g.beginPath(); for (let i = 0; i < 6; i++) { g.moveTo(rnd() * sz, rnd() * sz); g.lineTo(rnd() * sz, rnd() * sz); } g.globalAlpha = 0.5; g.stroke();
+  }, 4),
+  canLabel: () => make('canLabel', 256, (g, sz) => {
+    const gr = g.createLinearGradient(0, 0, sz, 0); gr.addColorStop(0, '#1d3f8a'); gr.addColorStop(0.5, '#3a6ad8'); gr.addColorStop(1, '#1d3f8a');
+    g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+    g.fillStyle = '#e8a83a'; g.beginPath(); g.ellipse(sz / 2, sz / 2, 90, 60, 0, 0, 7); g.fill();
+    g.fillStyle = '#1d3f8a'; g.font = '900 40px Impact, sans-serif'; g.textAlign = 'center'; g.fillText('BACH', sz / 2, sz / 2 - 4); g.font = '900 30px Impact, sans-serif'; g.fillText('GOLD', sz / 2, sz / 2 + 30);
+    g.fillStyle = '#fff'; for (let i = 0; i < 4; i++) g.fillText('★', sz / 2 - 45 + i * 30, sz / 2 + 80);
+  }),
+  lpLabel: () => make('lpLabel', 128, (g, sz) => {
+    g.fillStyle = '#2a1a0a'; g.beginPath(); g.arc(sz / 2, sz / 2, sz / 2, 0, 7); g.fill();
+    g.fillStyle = '#ffd21f'; g.beginPath(); g.arc(sz / 2, sz / 2, sz / 2 - 8, 0, 7); g.fill();
+    g.fillStyle = '#3a1f0a'; g.font = '900 46px Impact, sans-serif'; g.textAlign = 'center'; g.fillText('L&P', sz / 2, sz / 2 + 16);
+  }, 4),
+  breeza: () => make('breeza', 256, (g, sz) => {
+    g.fillStyle = '#e8641a'; g.fillRect(0, 0, sz, sz);
+    g.fillStyle = '#1a1a1a'; g.fillRect(0, sz * 0.38, sz, sz * 0.24);
+    g.fillStyle = '#ffffff'; g.font = '900 38px Impact, sans-serif'; g.textAlign = 'center'; g.fillText('BREEZA 5000', sz / 2, sz / 2 + 13);
+    speckle(g, sz, 300, ['rgba(0,0,0,0.25)', 'rgba(255,255,255,0.15)'], 1, 4);
+  }),
   label: (text, bg, fg, w = 256, h = 128) => make('lbl' + text + bg + fg, w, (g, s) => {
     g.fillStyle = bg; g.fillRect(0, 0, s, s);
     g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle';

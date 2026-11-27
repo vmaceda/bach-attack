@@ -4,7 +4,7 @@ A third-person shooter trap-defence game set in a suburban Kiwi bach. Seagulls, 
 are after the beers in the bach fridge. You have wet decking, flying jandals, a sausage sizzle, Marmite and a No. 8 wire
 farm gate to stop them.
 
-**`index.html` is the whole game:** one ~735 KB file (~205 KB gzipped), with no CDN, no asset files and no `data:` blobs.
+**`index.html` is the whole game:** one ~755 KB file (~211 KB gzipped), with no CDN, no asset files and no `data:` blobs.
 It follows the same model as WHITEOUT: three.js r180 is bundled by esbuild into a single HTML file, every texture is
 drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 
@@ -38,14 +38,33 @@ porch, floor/wall/ceiling traps placeable, every pest can reach the fridge). Lev
 
 ## Characters
 
-- **Bazza** (you): a sunburnt bobble-headed bogan with googly eyes, a mullet, a mo, buck teeth, zinc on the nose,
-  pink sunnies parked on a bucket hat, and a black singlet that gave up halfway down a magnificent pot belly. Tiny
-  stubbies, knobbly knees, socks and gumboots. His head bobbles and his belly jiggles on springs, he waddles, and
-  if you leave him alone he dances, drums his belly or blows bubble gum until it pops. He never stops talking
-  ("CHUR!", "Wanna see me belly button?", "Me mullet!") in a gibberish blurt voice.
-- **Pests** all have googly eyes that rattle around and they won't shut up: seagulls scream "MINE!" and **poop on
-  you** (the screen gets splattered), possums do a victory bum-wiggle and giggle when a pine cone hits you, and the
-  ride-on mower has its tongue out and honks a clown horn ("AWOOGA!", "LAWN AND ORDER!").
+- **Bazza, Defender of the Bach** (you): sun-browned, long wavy hair, full beard and laughing eyes under a cork hat
+  with dangling corks; sun-faded black "CHUR!" singlet, fern-tattooed arms, pounamu on a cord, frayed khaki stubbies
+  with a leather tool belt, tall gumboots. Carries a chunky brass-and-glass pressurised **L&P Fizz Cannon** (gauges,
+  hose, flared nozzle) and a hip-holstered **BREEZA 5000** leaf blower. His corks swing, head bobs and belly jiggles; idle
+  him and he dances, drums his belly or blows bubble gum. He talks constantly.
+- **Seagull Bandit**: ruffled plumage, heavy-lidded shifty eyes, smug hooked beak, a bottle-cap monocle on a chain and
+  a stolen tinny clutched to its chest. Posh and greedy ("Indeed. MINE."). Poops on you; near the fridge it may
+  **swoop** straight at it.
+- **Possum Burglar**: huge unhinged eyes and a toothy grin, bushy ringed tail with a cloth tie, green bandana, patched
+  leather vest and tool belt, a twirling grappling hook and a bulging **SWAG** sack. Lobs pine cones and bum-wiggles
+  when one lands.
+- **The Grim Cutter** (feral ride-on mower): rune-etched dark iron armour that glows red, burning red headlight eyes,
+  a fanged snarling grille and spiked bumper, a vine-wrapped skull on the hood, horned seat with chains, spiked tyres,
+  sparking blades and twin exhausts belching black smoke and flame. Roars instead of honking.
+
+(Beer labels are generic "BACH GOLD" rather than real brands.)
+
+## Smarter pests and alternative paths
+
+- Most generated maps include one or two **forks**: a house in the middle with a lane down each side (one a raised
+  deck, the other under a pergola), so every door has several routes to the fridge. Pests spread across them.
+- Each wave and level raises the **Pest IQ** (shown in the wave panel). Thinking pests:
+  - pick the **least-trapped route** when they spawn and **re-plan before forks** as you build ("REROUTE!");
+  - **jump** floor traps (gulls flap higher and further) or **side-step** them when there's room;
+  - **dash** out from under a dropping No. 8 wire gate or gumboot stomper;
+  - mowers are too heavy to jump and think slowly, but they still choose routes.
+- Level 1 pests are thick as; by level 5–6 they read your build, so trap every branch.
 
 ## The level: "The Suburban Bach Chokepoint"
 

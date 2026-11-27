@@ -197,12 +197,13 @@ export function createSim({ seed = 4207 } = {}) {
     const D = ENEMIES[type], dr = S.layout.doors[door];
     const e = {
       id: S.nextId++, type, x: dr.x + (rng() - 0.5) * 2.4, y: 0, z: dr.z + rng() * 0.6, vx: 0, vy: 0, vz: 0,
-      yaw: 0, hp: D.hp, maxHp: D.hp, path: S.layout.paths[door], wp: 0, start: null, onGround: true, dead: false,
+      yaw: 0, hp: D.hp, maxHp: D.hp, path: S.layout.paths[door], route: null, door, wp: 0, start: null, onGround: true, dead: false,
       stunT: 0, slowT: 0, slowMul: 1, burnT: 0, burnDps: 0, wetX: 0, wetZ: 0, onWet: false, mar: false,
       chain: [], chainT: -9, lastSrc: '', shootT: 1 + rng() * 1.5, shots: 0, mode: 'walk', hurtT: -9,
-      bob: rng() * 10, airT: 0, poopCd: 2 + rng() * 4, tauntT: 0, honkT: 3 + rng() * 6,
+      bob: rng() * 10, airT: 0, poopCd: 2 + rng() * 4, tauntT: 0, honkT: 3 + rng() * 6, jumpCd: 0, judged: 0, dashT: 0, planT: 1 + rng(), sideT: 0, sideX: 0, sideZ: 0,
     };
     e.start = { x: e.x, z: e.z };
+    chooseRoute(e, true);
     S.enemies.push(e);
     S.spawned++;
     ev('spawn', { id: e.id, etype: type, x: e.x, z: e.z });
@@ -455,7 +456,7 @@ export function createSim({ seed = 4207 } = {}) {
           }
         }
       } else if (tr.type === 'stomper') {
-        if (tr.phase === 'idle' && tr.cd <= 0 && now.size) { tr.phase = 'drop'; tr.pt = T.delay; ev('trap', { act: 'warn', trap: tr }); }
+        if (tr.phase === 'idle' && tr.cd <= 0 && now.size) { tr.phase = 'drop'; tr.pt = T.delay; ev('trap', { act: 'warn', trap: tr }); dodgeDrop(tr, now); }
         else if (tr.phase === 'drop') {
           tr.pt -= h;
           if (tr.pt <= 0) {
@@ -465,7 +466,7 @@ export function createSim({ seed = 4207 } = {}) {
           }
         }
       } else if (tr.type === 'gate') {
-        if (tr.phase === 'idle' && tr.cd <= 0 && now.size) { tr.phase = 'drop'; tr.pt = T.delay; ev('trap', { act: 'warn', trap: tr }); }
+        if (tr.phase === 'idle' && tr.cd <= 0 && now.size) { tr.phase = 'drop'; tr.pt = T.delay; ev('trap', { act: 'warn', trap: tr }); dodgeDrop(tr, now); }
         else if (tr.phase === 'drop') {
           tr.pt -= h;
           if (tr.pt <= 0) {
@@ -480,6 +481,83 @@ export function createSim({ seed = 4207 } = {}) {
   }
 
   // ------------------------------------------------------------------ enemies
+  // ================================================================== pest brains
+  // IQ rises every wave and every level: level 1 pests are thick as; by level 5 they read your build.
+  const IQ_TYPE = { gull: { route: 0.8, jump: 1.15, dash: 1.1 }, possum: { route: 1.2, jump: 1.0, dash: 0.9 }, mower: { route: 0.6, jump: 0, dash: 0.4 } };
+  const THREAT = { wet: 1, marmite: 1.2, sizzle: 2, jandal: 2.5, zapper: 2, gate: 2.5, catapult: 2.5, stomper: 2 };
+  const FLOOR = new Set(['wet', 'marmite', 'sizzle', 'catapult']);
+  function iq() { return Math.min(0.9, Math.max(0, (S.level - 1) * 0.16 + S.wave * 0.03 - 0.04)); }
+  function routeDanger(pts, from) {
+    let d = 0;
+    for (const tr of S.traps) {
+      if (tr.disabledT > 0) continue;
+      for (let i = Math.max(0, from); i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1], abx = b.x - a.x, abz = b.z - a.z, l2 = abx * abx + abz * abz || 1;
+        const t = Math.max(0, Math.min(1, ((tr.x - a.x) * abx + (tr.z - a.z) * abz) / l2));
+        if (Math.hypot(a.x + abx * t - tr.x, a.z + abz * t - tr.z) < (tr.mount === 'wall' ? 4.2 : 2.6)) { d += THREAT[tr.type] || 1; break; }
+      }
+    }
+    return d;
+  }
+  const routeLen = (pts, from) => { let l = 0; for (let i = Math.max(0, from); i < pts.length - 1; i++) l += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z); return l; };
+  // pick among the routes from this pest's door that share the path it has already walked
+  function chooseRoute(e, fresh) {
+    const all = S.layout.routes.filter((r) => r.door === e.door);
+    if (all.length < 2) { if (!e.route) { e.route = all[0]; e.path = all[0].pts; } return; }
+    const cur = e.path, k = fresh ? 0 : e.wp;
+    const same = (a, b) => Math.abs(a.x - b.x) < 0.01 && Math.abs(a.z - b.z) < 0.01;
+    const cands = fresh ? all : all.filter((r) => { for (let i = 0; i <= k && i < r.pts.length; i++) if (!same(r.pts[i], cur[i])) return false; return true; });
+    if (cands.length < 2) return;
+    const smart = iq() * IQ_TYPE[e.type].route;
+    const thinking = rng() < smart;
+    if (!fresh && !thinking) return; // only a thinking pest changes its mind mid-run
+    let pick = cands[Math.floor(rng() * cands.length)];
+    if (thinking) { // a thinking pest: least trapped (then shortest) way to the beer
+      let best = Infinity;
+      for (const r of cands) { const sc = routeDanger(r.pts, k) * 10 + routeLen(r.pts, k) * 0.05 + rng() * 0.5; if (sc < best) { best = sc; pick = r; } }
+    }
+    if (pick !== e.route) {
+      const switched = !fresh && e.route;
+      e.route = pick; e.path = pick.pts;
+      if (switched) ev('dodge', { id: e.id, etype: e.type, kind: 'reroute', x: e.x, y: e.y, z: e.z });
+    }
+  }
+  // look ahead for a floor trap on the way; jump it or side-step it
+  function avoidFloorTraps(e, D, dirx, dirz, speed) {
+    if (!e.onGround || e.stunT > 0 || e.jumpCd > 0 || speed < 0.5) return;
+    const smart = iq();
+    if (smart <= 0) return;
+    for (const tr of S.traps) {
+      if (!FLOOR.has(tr.type) || tr.disabledT > 0 || Math.abs(tr.y - e.y) > 0.5) continue;
+      const rx = tr.x - e.x, rz = tr.z - e.z, along = rx * dirx + rz * dirz, lat = -rx * dirz + rz * dirx;
+      if (along < 0.9 || along > 2.6 || Math.abs(lat) > 1.5) continue;
+      if (e.judged === tr.id) return; // already decided about this one
+      e.judged = tr.id;
+      const T = IQ_TYPE[e.type];
+      if (T.jump > 0 && rng() < smart * T.jump * 0.85) {
+        // HOP! clears the 2 m tile: gulls flap higher and further
+        const boost = e.type === 'gull' ? 1.45 : 1.3, up = e.type === 'gull' ? 7.2 : 6.6;
+        e.vx = dirx * speed * boost; e.vz = dirz * speed * boost; e.vy = up; e.onGround = false; e.jumpCd = 1.2;
+        ev('dodge', { id: e.id, etype: e.type, kind: 'jump', x: e.x, y: e.y, z: e.z });
+        return;
+      }
+      if (rng() < smart * 0.6) { // side-step if there is level floor beside the trap
+        const side = lat > 0 ? -1 : 1, off = 1.6 + Math.abs(lat) * 0.2;
+        const sx = tr.x + -dirz * side * (1.1 + off) * 1, sz = tr.z + dirx * side * (1.1 + off);
+        if (Math.abs(heightAt(sx, sz, e.y + 0.3, 0.3) - e.y) < 0.05) { e.sideX = -dirz * side; e.sideZ = dirx * side; e.sideT = 0.9; ev('dodge', { id: e.id, etype: e.type, kind: 'step', x: e.x, y: e.y, z: e.z }); }
+      }
+      return;
+    }
+  }
+  // a gate or stomper is dropping on me: leg it
+  function dodgeDrop(tr, now) {
+    const smart = iq();
+    for (const e of now) {
+      if (e.stunT > 0 || rng() >= smart * IQ_TYPE[e.type].dash) continue;
+      e.dashT = 0.45; ev('dodge', { id: e.id, etype: e.type, kind: 'dash', x: e.x, y: e.y, z: e.z });
+    }
+  }
+
   function stepEnemies(h) {
     const P = S.player;
     for (const e of S.enemies) {
@@ -505,7 +583,10 @@ export function createSim({ seed = 4207 } = {}) {
       const la = Math.min(1, Math.max(0, tt) + 2.5 / Math.sqrt(L2));
       const tx = e.wp === last && la >= 1 ? B.x : A.x + abx * la, tz = e.wp === last && la >= 1 ? B.z : A.z + abz * la;
       const dx = tx - e.x, dz = tz - e.z, dist = Math.hypot(dx, dz);
+      e.jumpCd -= h; e.dashT -= h; e.sideT -= h; e.planT -= h;
+      if (e.planT <= 0) { e.planT = 1.2 + rng() * 0.6; if (iq() > 0) chooseRoute(e, false); }
       let speed = D.speed * (e.slowT > 0 ? e.slowMul : 1);
+      if (e.dashT > 0) speed *= 2.6;
       if (e.stunT > 0) speed = 0;
       // ---- possum: stop and lob pine cones at the player (or gum up a trap)
       if (D.range && e.stunT <= 0) {
@@ -533,7 +614,12 @@ export function createSim({ seed = 4207 } = {}) {
       }
       // ---- steering (low traction on wet decking = skid)
       let wx = 0, wz = 0;
-      if (dist > 0.01) { wx = (dx / dist) * speed; wz = (dz / dist) * speed; }
+      if (dist > 0.01) {
+        let ux = dx / dist, uz = dz / dist;
+        avoidFloorTraps(e, D, ux, uz, speed);
+        if (e.sideT > 0) { ux += e.sideX * 0.9; uz += e.sideZ * 0.9; const l = Math.hypot(ux, uz) || 1; ux /= l; uz /= l; }
+        wx = ux * speed; wz = uz * speed;
+      }
       let trac = e.onGround ? (e.onWet ? 0.45 : 9) : 0.3;
       if (D.mass > 3 && e.onGround) trac = e.onWet ? 0.9 : 6;
       const k = Math.min(1, trac * h);
@@ -577,6 +663,16 @@ export function createSim({ seed = 4207 } = {}) {
           const tf = 0.75, g = 18;
           S.cones.push({ x: ox, y: oy, z: oz, vx: (tx - ox) / tf, vy: (ty - oy) / tf + 0.5 * g * tf, vz: (tz - oz) / tf, g, trapId: 0, life: 3, kind: 'poop' });
           ev('poopLaunch', { id: e.id, x: ox, y: oy, z: oz });
+        }
+        // the bandit swoop: close to the fridge, flap up and glide straight for it
+        const G0 = S.layout.goal, gd = Math.hypot(G0.x - e.x, G0.z - e.z);
+        if (!e.swooped && e.onGround && e.stunT <= 0 && gd < 16 && gd > 6) {
+          e.swooped = true;
+          if (rng() < 0.12 + iq() * 0.6) {
+            const ux = (G0.x - e.x) / gd, uz = (G0.z - e.z) / gd;
+            e.vx = ux * D.speed * 1.6; e.vz = uz * D.speed * 1.6; e.vy = 6.5; e.onGround = false;
+            ev('dodge', { id: e.id, etype: 'gull', kind: 'swoop', x: e.x, y: e.y, z: e.z });
+          }
         }
       } else if (e.type === 'mower') {
         e.honkT -= h;
@@ -761,7 +857,7 @@ export function createSim({ seed = 4207 } = {}) {
 
   function drainEvents() { const e = S.events; S.events = []; return e; }
 
-  const sim = { state: null, reset, step, drainEvents, queryPlacement, raycastAll, sellTrap, startWave, nextLevel };
+  const sim = { state: null, get iq() { return iq(); }, reset, step, drainEvents, queryPlacement, raycastAll, sellTrap, startWave, nextLevel };
   reset();
   return sim;
 }

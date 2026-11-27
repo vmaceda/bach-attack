@@ -102,7 +102,8 @@ export function createHUD(root) {
     const P = S.player, W = S.waveDef;
     set('waveNo', `LVL ${S.level} · WAVE ${Math.min(S.wave + 1, WAVES_PER_LEVEL)}/${WAVES_PER_LEVEL}`);
     set('waveName', W.name);
-    set('levelName', S.layout.name);
+    const iq = Math.round(Math.min(0.9, Math.max(0, (S.level - 1) * 0.16 + S.wave * 0.03 - 0.04)) * 100);
+    set('levelName', `${S.layout.name} · PEST IQ ${iq}${iq >= 50 ? ' 🧠' : ''}`);
     if (S.phase === 'build') {
       set('waveStatus', `Build time: <b>${Math.ceil(S.buildT)}s</b> — press <kbd>G</kbd> to send 'em early`, true);
       const counts = {};

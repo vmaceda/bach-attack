@@ -13,7 +13,7 @@ for (const [id, [o, d]] of Object.entries(plan)) {
 }
 const fired = {}; let flyers = 0, jhits = 0;
 const cmd = blankCmd(); cmd.startWave = true;
-for (let k = 0; k < 60 * 120 && S.wave < 2; k++) {
+for (let k = 0; k < 60 * 240 && S.wave < 3 && S.phase !== 'levelClear'; k++) {
   sim.step(1 / 60, cmd); cmd.startWave = S.phase === 'build';
   flyers = Math.max(flyers, S.flyers.length);
   for (const e of sim.drainEvents()) { if (e.type === 'trap' && e.act === 'fire') fired[e.trap.type] = (fired[e.trap.type] || 0) + 1; if (e.type === 'jandalHit') jhits++; }

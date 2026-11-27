@@ -9,7 +9,7 @@ await page.goto(url('&cam=11.6,3.9,2.6,14,3.55,2'));
 await page.waitForTimeout(1500); await page.screenshot({ path: 'shots/40-bazza-idle.png' });
 await page.evaluate(() => { window.__game.view.BZ.idleT = 3.2; }); await page.waitForTimeout(2500); await page.screenshot({ path: 'shots/41-bazza-antic.png' });
 // pests line-up near the courtyard
-await page.goto(url('&cam=-1.5,1.6,-19,-1.5,0.8,-13'));
+await page.goto(url('&cam=-0.6,1.7,-17.2,-0.8,0.9,-13'));
 await page.waitForTimeout(1200);
 await page.evaluate(() => {
   const g = window.__game, S = g.sim.state; g.sim.startWave(); S.spawnQ = [];
@@ -22,7 +22,7 @@ await page.evaluate(() => {
   ['gull', 'possum', 'mower', 'gull'].forEach((t) => mk(t));
 });
 await page.waitForTimeout(250);
-await page.evaluate(() => { const S = window.__game.sim.state; const pos = [[-3.2, -13], [-1.2, -13.5], [1.6, -12.5]]; S.enemies.forEach((e, i) => { const p = pos[i % 3]; e.x = p[0]; e.z = p[1]; e.stunT = 99; e.yaw = Math.PI; }); S.events.push({ type: 'honk', id: S.enemies[2]?.id }); S.events.push({ type: 'taunt', id: S.enemies[1]?.id }); });
+await page.evaluate(() => { const S = window.__game.sim.state; const pos = [[-2.6, -13.4], [-0.9, -13.6], [1.4, -12.6], [-3.6, -14.6]]; S.enemies.forEach((e, i) => { const p = pos[i % 4]; e.x = p[0]; e.z = p[1]; e.stunT = 0.01; e.yaw = 0; e.vx = 0; e.vz = 0; e.path = [{ x: e.x, z: e.z }]; e.route = null; e.wp = 0; e.planT = 1e9; }); S.events.push({ type: 'honk', id: S.enemies[2]?.id }); S.events.push({ type: 'taunt', id: S.enemies[1]?.id }); });
 await page.waitForTimeout(900);
 await page.screenshot({ path: 'shots/42-pests.png' });
 await page.evaluate(() => window.__game.sim.state.events.push({ type: 'splat' }));

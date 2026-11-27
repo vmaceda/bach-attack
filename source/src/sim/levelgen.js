@@ -54,6 +54,8 @@ export function generateLevel(n, seed) {
   const feats = ['GULLY', 'CARPORT'];
   const extra = RI(0, 2);
   for (let i = 0; i < extra; i++) feats.push(pick(['COURTYARD', 'BRIDGE', 'GULLY', 'COURTYARD']));
+  if (rnd() < 0.7) feats.push('SPLIT');            // most maps get a fork: two lanes around a house
+  if (n >= 4 && rnd() < 0.35) feats.push('SPLIT'); // later maps sometimes get two
   for (let i = feats.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [feats[i], feats[j]] = [feats[j], feats[i]]; }
 
   const boxes = [], pits = [], decorSigns = [], houses = [];
@@ -107,6 +109,24 @@ export function generateLevel(n, seed) {
       boxes.push(B(lx - 4, 2.8, f0 + 1, lx + 4, 3.3, f0 + len, 'roof', 'carportroof'));
       bands.push({ z0: f0, z1: f0 + len, pits: [] });
       decorSigns.push({ lines: pick([['SLOW', 'PESTS AT', 'PLAY'], ['NO', 'PARKING', 'EVER'], ['MIND', 'YA HEAD']]), x: lx, y: 3.95, z: f0 + 0.9, ry: Math.PI });
+    } else if (type === 'SPLIT') {
+      // a fork: a house in the middle with a lane down each side. One side is a raised deck, the other runs under a
+      // pergola (ceiling traps), and the house walls face both lanes (wall traps). Pests pick a side.
+      len = even(R(14, 20));
+      const cw = R(5, 6.5), c = Math.round(((A + Bx) / 2 + R(-1.2, 1.2)) * 2) / 2;
+      const h0 = c - cw / 2, h1 = c + cw / 2;
+      const lxL = Math.round(((A + h0) / 2) * 2) / 2, lxR = Math.round(((h1 + Bx) / 2) * 2) / 2;
+      const look = pick(['bach', 'bachblue', 'bachyellow']);
+      const hb = B(h0, 0, f0, h1, 4.2, f0 + len, 'wall', look);
+      boxes.push(hb); houses.push(hb);
+      const deckLeft = rnd() < 0.5;
+      const [dx0, dx1] = deckLeft ? [A, h0] : [h1, Bx];
+      const [rx0, rx1] = deckLeft ? [h1, Bx] : [A, h0];
+      boxes.push(B(dx0, 0, f0, dx1, 0.6, f0 + len, 'deck', 'deck'));
+      boxes.push(B(rx0, 2.8, f0 + 2, rx1, 3.3, f0 + len - 2, 'roof', 'carportroof'));
+      bands.push({ z0: f0, z1: f0 + len, pits: [] });
+      decorSigns.push({ lines: pick([['SHORTCUT', '(maybe)'], ['THIS WAY', 'OR THAT'], ['LEFT?', 'RIGHT?']]), x: c, y: 2.6, z: f0 - 0.08, ry: Math.PI });
+      lx = c; lane.push({ lx, lxs: [lxL, lxR], z0: f0, z1: f0 + len, type }); z = f0 + len; continue;
     } else { // COURTYARD
       len = even(R(8, 12));
       lx = Math.round(R(A + 4, Bx - 4) * 2) / 2;
@@ -171,14 +191,21 @@ export function generateLevel(n, seed) {
   boxes.push(B(gx + 1.5, 0, fz - 0.5, gx + 2.7, 1.1, fz + 0.5, 'prop', 'piewarmer'));
   const goal = { x: gx, z: fz - 1.4, r: 1.5 };
 
-  // ---- enemy paths: door → merge → each feature (straight down its lane, shifting in the junctions) → fridge
-  const paths = doors.map((d) => {
-    const p = [{ x: d.x, z: Z0 + 9 }]; // clear of the door dividers before turning
-    for (const L of lane) { p.push({ x: L.lx, z: L.z0 - 0.8 }); p.push({ x: L.lx, z: L.z1 + 0.8 }); }
-    p.push({ x: gx, z: goal.z - 1.5 });
-    p.push({ x: gx, z: goal.z });
-    return p;
+  // ---- enemy routes: door → merge → each feature (straight down its lane, shifting in the junctions) → fridge.
+  //      Forks multiply the routes: every door gets one route per combination of fork sides.
+  let combos = [[]];
+  for (const L of lane) { const opts = L.lxs || [L.lx]; const next = []; for (const c of combos) for (const x of opts) next.push([...c, x]); combos = next; }
+  const routes = [];
+  doors.forEach((d, di) => {
+    for (const c of combos) {
+      const p = [{ x: d.x, z: Z0 + 9 }]; // clear of the door dividers before turning
+      lane.forEach((L, k) => { p.push({ x: c[k], z: L.z0 - 0.8 }); p.push({ x: c[k], z: L.z1 + 0.8 }); });
+      p.push({ x: gx, z: goal.z - 1.5 });
+      p.push({ x: gx, z: goal.z });
+      routes.push({ door: di, pts: p });
+    }
   });
+  const paths = doors.map((d, di) => routes.find((r) => r.door === di).pts);
 
   // ---- extras placed off the lane
   const offLane = (zz) => { const lx = laneXAt(lane, zz, doors); return lx < (A + Bx) / 2 ? Bx - 3 : A + 3; };
@@ -190,7 +217,7 @@ export function generateLevel(n, seed) {
   const g = lane.find((L) => L.type === 'GULLY');
   return finish({
     n, seed, name: `${owner}${owner.endsWith('s') ? '\'' : '\'s'} ${pick(SUFFIX)}, ${place}`,
-    boxes, doors, paths, goal,
+    boxes, doors, paths, routes, goal, forks: lane.filter((L) => L.lxs).length,
     playerSpawn: { x: (px0 + px1) / 2, y: 2.4, z: (pz0 + pz1) / 2, yaw: porchSide > 0 ? Math.PI / 2 : -Math.PI / 2 },
     arena: { x0: X0, x1: X1, z0: Z0, z1: Z1 }, pits, fridge: { x: gx, z: fz }, porchSide,
     extras: {
@@ -210,6 +237,8 @@ let nextId = 1;
 function finish(L) {
   L.id = nextId++;
   L.signs ||= [];
+  L.routes ||= L.paths.map((pts, door) => ({ door, pts }));
+  L.forks ||= 0;
   L.houses ||= L.boxes.filter((b) => b.look === 'bach');
   return L;
 }

@@ -27,12 +27,18 @@ for (let k = 0; k < N; k++) {
   }
   // walk 12 gulls + 4 mowers per door with no traps; everybody must reach the fridge
   S.phase = 'wave'; S.spawnQ = []; S.money = 0; S.fridge = S.fridgeMax = 9999;
-  const total = L.doors.length * 8;
-  for (let d = 0; d < L.doors.length; d++) for (let i = 0; i < 8; i++) S.spawnQ.push({ t: i * 0.7, type: i % 4 === 3 ? 'mower' : 'gull', door: d });
+  // every route gets walked: spawn per door, then force each pest onto a specific route
+  const total = L.routes.length * 3;
+  let qi = 0;
+  for (const r of L.routes) for (let i = 0; i < 3; i++) S.spawnQ.push({ t: (qi++) * 0.5, type: i === 2 ? 'mower' : 'gull', door: r.door, route: r });
+  S.spawnQ.sort((a, b) => a.t - b.t);
+  const pending = S.spawnQ.map((q) => q.route);
+  let assigned = 0;
   S.player.x = 999; // out of the way (possum-free test)
   const cmd = blankCmd(); let leaks = 0, t = 0;
   while (t < 120 && (S.spawnQ.length || S.enemies.length)) {
     sim.step(1 / 60, cmd); t += 1 / 60;
+    for (const e of S.enemies) if (!e.forced) { e.forced = true; const r = pending[assigned++]; if (r) { e.route = r; e.path = r.pts; e.planT = 1e9; } }
     for (const e of sim.drainEvents()) if (e.type === 'fridge') leaks++;
   }
   const stuck = S.enemies.length;
