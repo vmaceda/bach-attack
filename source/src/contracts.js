@@ -146,7 +146,24 @@ export const WAVES = [
   { name: 'Long Weekend Traffic', groups: [['gull', 16, 0.6, 'A', 0], ['possum', 6, 2.2, 'A', 2], ['mower', 4, 4.5, 'A', 6]] },
   { name: 'THE BIG MOW', groups: [['gull', 26, 0.45, 'A', 0], ['possum', 7, 2.4, 'A', 3], ['mower', 6, 3.6, 'A', 5], ['gull', 12, 0.3, 'A', 18]] },
 ];
-export const ECONOMY = { start: 800, firstBuild: 60, build: 25, earlyPerSec: 3, waveBonus: 100, waveBonusPer: 25, fridge: 25 };
+export const ECONOMY = { start: 800, firstBuild: 60, levelBuild: 45, build: 25, earlyPerSec: 3, waveBonus: 100, waveBonusPer: 25, fridge: 25, restock: 6 };
+export const WAVES_PER_LEVEL = 3;
+
+// difficulty d = (level-1)*3 + wave: the handcrafted WAVES first, then generated waves that keep escalating
+export function waveFor(d, rnd) {
+  if (d < WAVES.length) return WAVES[d];
+  const budget = 30 + d * 9, groups = [], names = ['Pest Control Failure', 'Bring A Plate', 'Long Lunch Riot', 'Boxing Day Sales', 'Smoko Stampede', 'Feral Fortnight', 'Just One More Wave', 'The Neighbours Called'];
+  let left = budget, t = 0;
+  while (left > 0) {
+    const r = rnd();
+    const type = r < 0.5 ? 'gull' : r < 0.78 ? 'possum' : 'mower';
+    const cost = { gull: 1, possum: 3, mower: 8 }[type];
+    const count = Math.max(1, Math.min(Math.floor(left / cost), type === 'gull' ? 10 + Math.floor(d / 2) : type === 'possum' ? 4 + Math.floor(d / 4) : 2 + Math.floor(d / 6)));
+    groups.push([type, count, type === 'gull' ? 0.45 : type === 'possum' ? 2.2 : 3.6, 'A', t]);
+    left -= count * cost; t += 2 + rnd() * 4;
+  }
+  return { name: names[d % names.length] + (d >= 16 ? ' (Hard Out)' : ''), groups };
+}
 
 // combo callouts by chain length (2, 3, 4, 5+)
 export const CALLOUTS = [

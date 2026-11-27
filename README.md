@@ -4,7 +4,7 @@ A third-person shooter trap-defence game set in a suburban Kiwi bach. Seagulls, 
 are after the beers in the bach fridge. You have wet decking, flying jandals, a sausage sizzle, Marmite and a No. 8 wire
 farm gate to stop them.
 
-**`index.html` is the whole game:** one ~710 KB file (~195 KB gzipped), with no CDN, no asset files and no `data:` blobs.
+**`index.html` is the whole game:** one ~735 KB file (~205 KB gzipped), with no CDN, no asset files and no `data:` blobs.
 It follows the same model as WHITEOUT: three.js r180 is bundled by esbuild into a single HTML file, every texture is
 drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 
@@ -20,6 +20,32 @@ drawn on a canvas at load time, and every sound is synthesised with Web Audio.
 | Build | B toggles build mode. 1–8 select a trap (and enter build mode); the mouse wheel cycles traps. LMB places, R rotates directional traps, X or RMB sells for an 80 % refund (between waves only) |
 | Waves | G starts the next wave early, with bonus shrapnel for the time left on the build timer |
 | Meta | P or Esc pauses · Tab frees the cursor without pausing · M mutes everything · N toggles the music · Backspace restarts instantly · Enter restarts from the end screen |
+
+## Endless random levels
+
+Each level is **3 waves**. Clear them and your traps are packed into the ute (100 % refund), the fridge gets a restock
+from the dairy (+6 beers), and you're dropped into a **brand-new, randomly generated bach** — "Uncle Dave's Crib,
+Raglan", "The Johnsons' Glamping Disaster, Piha"… Difficulty keeps climbing (generated waves after the handcrafted
+ones). It's endless; the game-over screen shows the level you reached and your best ever.
+
+The generator (`source/src/sim/levelgen.js`) builds each map north → south from lane features with random widths,
+sides and order — **Gully** (raised deck between a house wall and a compost drop), **Carport** (walled lane with a low
+roof), **Courtyard** (hedge blocks and junk to funnel around) and **Bridge** (a plank deck with drops on both sides) —
+plus 1–3 spawn doors, a porch catwalk on a random side, and the fridge in the back yard. Every map has at least one
+Gully and one Carport, so every trap has somewhere to live. `tools/levels.mjs` validates generated maps (spawn on the
+porch, floor/wall/ceiling traps placeable, every pest can reach the fridge). Level 1 is always the handcrafted
+"Suburban Bach Chokepoint" below. Each new game uses a new seed (`?seed=N` to replay a run).
+
+## Characters
+
+- **Bazza** (you): a sunburnt bobble-headed bogan with googly eyes, a mullet, a mo, buck teeth, zinc on the nose,
+  pink sunnies parked on a bucket hat, and a black singlet that gave up halfway down a magnificent pot belly. Tiny
+  stubbies, knobbly knees, socks and gumboots. His head bobbles and his belly jiggles on springs, he waddles, and
+  if you leave him alone he dances, drums his belly or blows bubble gum until it pops. He never stops talking
+  ("CHUR!", "Wanna see me belly button?", "Me mullet!") in a gibberish blurt voice.
+- **Pests** all have googly eyes that rattle around and they won't shut up: seagulls scream "MINE!" and **poop on
+  you** (the screen gets splattered), possums do a victory bum-wiggle and giggle when a pine cone hits you, and the
+  ride-on mower has its tongue out and honks a clown horn ("AWOOGA!", "LAWN AND ORDER!").
 
 ## The level: "The Suburban Bach Chokepoint"
 
@@ -87,7 +113,8 @@ slots, esbuild IIFE output, and a hard 2 MB budget.
 
 ```
 src/
-  contracts.js      level boxes, lanes, traps, enemies, waves, economy. Pure data, shared by sim and renderer
+  contracts.js      level-1 boxes, traps, enemies, waves (+ generated waves), economy. Pure data
+    levelgen.js     (in sim/) random level layouts: boxes, doors, enemy paths, goal, porch, decor anchors
   sim/              simulation: no three.js, no DOM, runs headless in node
     world.js        AABB collision, heightAt, raycast, sphere sweep (also used for camera collision)
     index.js        player, weapons, blower, traps, enemies + path following, projectiles, waves, combos, placement
@@ -103,7 +130,7 @@ src/
   audio.js          procedural Web Audio SFX + mower drone + surf ambience, mute
   hud.js            DOM HUD: wave panel and preview, shrapnel, fridge bar, hotbar, callouts, floaters, control hint
   main.js           controller: input → cmd → sim.step (60 Hz) → events → view/hud/audio; state machine
-tools/  soak.mjs · balance.mjs · newtraps.mjs (headless sims) · jandalshot.mjs · smoke.mjs · camtest.mjs · ghosttest.mjs · poses.mjs (Playwright)
+tools/  soak.mjs · balance.mjs · newtraps.mjs · levels.mjs · progress.mjs (headless sims) · charshot.mjs · jandalshot.mjs · smoke.mjs · camtest.mjs · ghosttest.mjs · poses.mjs (Playwright)
 ```
 
 The controller only talks to the sim through a per-step `cmd` object: move vector, aim yaw, camera ray, and

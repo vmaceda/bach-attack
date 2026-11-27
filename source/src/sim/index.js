@@ -8,10 +8,11 @@
 //
 // The renderer never mutates state; the controller only talks to the sim through cmd.
 import {
-  PLAYER, WEAPONS, BLOWER, TRAPS, TRAP_TAG, WEAPON_TAG, ENEMIES, WAVES, ECONOMY, PATHS, DOORS, GOAL, PIT,
-  PLAYER_SPAWN, SELL_REFUND, GRID, CALLOUTS,
+  PLAYER, WEAPONS, BLOWER, TRAPS, TRAP_TAG, WEAPON_TAG, ENEMIES, ECONOMY, PIT, SELL_REFUND, GRID, CALLOUTS,
+  WAVES_PER_LEVEL, waveFor,
 } from '../contracts.js';
-import { heightAt, collideCylinder, ceilingAt, raycast, solidAt } from './world.js';
+import { heightAt, collideCylinder, ceilingAt, raycast, solidAt, setLevelBoxes } from './world.js';
+import { classicLevel, generateLevel } from './levelgen.js';
 
 const mulberry32 = (seed) => () => {
   seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
@@ -38,7 +39,11 @@ export function createSim({ seed = 4207 } = {}) {
 
   function reset() {
     rng = mulberry32(seed);
+    const layout = classicLevel();
+    setLevelBoxes(layout.boxes);
+    const PLAYER_SPAWN = layout.playerSpawn;
     S = {
+      layout, level: 1, levelT: 0,
       t: 0, phase: 'build', wave: 0, buildT: ECONOMY.firstBuild, waveT: 0,
       money: ECONOMY.start, fridge: ECONOMY.fridge, fridgeMax: ECONOMY.fridge,
       player: {
@@ -53,6 +58,7 @@ export function createSim({ seed = 4207 } = {}) {
       events: [], nextId: 1,
     };
     sim.state = S;
+    planWave();
     return S;
   }
 
@@ -104,8 +110,8 @@ export function createSim({ seed = 4207 } = {}) {
       for (const [ax, az] of [[0, 0], [-s, -s], [s, -s], [-s, s], [s, s]]) {
         if (Math.abs(heightAt(cx + ax, cz + az, y + 0.01, 0.05) - y) > 0.02 || solidAt(cx + ax, y + 0.5, cz + az)) { q.reason = 'Uneven ground — needs a flat 2×2'; return q; }
       }
-      if (Math.hypot(cx - DOORS.L.x, cz - DOORS.L.z) < 3.5 || Math.hypot(cx - DOORS.R.x, cz - DOORS.R.z) < 3.5) { q.reason = 'Too close to the door'; return q; }
-      if (Math.hypot(cx - GOAL.x, cz - GOAL.z) < 2.6) { q.reason = 'Hands off the fridge'; return q; }
+      if (S.layout.doors.some((dr) => Math.hypot(cx - dr.x, cz - dr.z) < 3.5)) { q.reason = 'Too close to the door'; return q; }
+      if (Math.hypot(cx - S.layout.goal.x, cz - S.layout.goal.z) < 2.6) { q.reason = 'Hands off the fridge'; return q; }
       q.key = `f:${cx}:${cz}:${y}`;
       const a = (rot % 4) * Math.PI * 0.5; q.nx = Math.cos(a); q.nz = Math.sin(a);
     } else if (T.mount === 'wall') {
@@ -176,10 +182,11 @@ export function createSim({ seed = 4207 } = {}) {
     if (S.phase !== 'build') return;
     const bonus = Math.floor(S.buildT * ECONOMY.earlyPerSec);
     if (bonus > 0 && S.wave > 0) { S.money += bonus; ev('msg', { text: `Early start: +${bonus} shrapnel`, small: true }); }
-    const W = WAVES[S.wave];
-    const q = [];
+    const W = S.nextWave;
+    const q = [], nd = S.layout.doors.length;
+    let alt = 0;
     for (const [type, count, every, door, delay] of W.groups) {
-      for (let i = 0; i < count; i++) q.push({ t: delay + i * every + rng() * 0.25, type, door: door === 'A' ? (i % 2 ? 'R' : 'L') : door });
+      for (let i = 0; i < count; i++) q.push({ t: delay + i * every + rng() * 0.25, type, door: door === 'A' ? (alt++) % nd : door === 'L' ? 0 : nd - 1 });
     }
     q.sort((a, b) => a.t - b.t);
     S.spawnQ = q; S.waveTotal = q.length; S.spawned = 0; S.waveT = 0; S.phase = 'wave';
@@ -187,13 +194,13 @@ export function createSim({ seed = 4207 } = {}) {
   }
 
   function spawnEnemy(type, door) {
-    const D = ENEMIES[type], dr = DOORS[door];
+    const D = ENEMIES[type], dr = S.layout.doors[door];
     const e = {
       id: S.nextId++, type, x: dr.x + (rng() - 0.5) * 2.4, y: 0, z: dr.z + rng() * 0.6, vx: 0, vy: 0, vz: 0,
-      yaw: 0, hp: D.hp, maxHp: D.hp, path: PATHS[door], wp: 0, start: null, onGround: true, dead: false,
+      yaw: 0, hp: D.hp, maxHp: D.hp, path: S.layout.paths[door], wp: 0, start: null, onGround: true, dead: false,
       stunT: 0, slowT: 0, slowMul: 1, burnT: 0, burnDps: 0, wetX: 0, wetZ: 0, onWet: false, mar: false,
       chain: [], chainT: -9, lastSrc: '', shootT: 1 + rng() * 1.5, shots: 0, mode: 'walk', hurtT: -9,
-      bob: rng() * 10, airT: 0,
+      bob: rng() * 10, airT: 0, poopCd: 2 + rng() * 4, tauntT: 0, honkT: 3 + rng() * 6,
     };
     e.start = { x: e.x, z: e.z };
     S.enemies.push(e);
@@ -205,9 +212,9 @@ export function createSim({ seed = 4207 } = {}) {
   function tag(e, t) {
     if (S.t - e.chainT > 3) e.chain.length = 0;
     e.chainT = S.t;
-    if (e.chain[e.chain.length - 1] === t) return;
+    if (e.chain.includes(t)) return; // only a NEW kind of hit extends the chain (no ping-pong farming)
     e.chain.push(t);
-    if (e.chain.length >= 2 && e.chain.some(isTrapTag)) comboLink(e);
+    if (e.chain.length >= 2 && e.chain.length <= 6 && e.chain.some(isTrapTag)) comboLink(e);
   }
 
   function comboLink(e) {
@@ -260,8 +267,9 @@ export function createSim({ seed = 4207 } = {}) {
 
   function respawnPlayer(msg) {
     const P = S.player;
+    const PLAYER_SPAWN = S.layout.playerSpawn;
     Object.assign(P, { x: PLAYER_SPAWN.x, y: PLAYER_SPAWN.y, z: PLAYER_SPAWN.z, vx: 0, vy: 0, vz: 0, hp: PLAYER.hp, dead: false, dashT: 0 });
-    ev('respawn', { text: msg });
+    if (msg) ev('respawn', { text: msg });
   }
 
   function fire(cmd) {
@@ -552,11 +560,28 @@ export function createSim({ seed = 4207 } = {}) {
         continue;
       }
       // ---- reached the fridge
+      const GOAL = S.layout.goal;
       if (Math.hypot(GOAL.x - e.x, GOAL.z - e.z) < GOAL.r + D.radius && e.wp >= path.length - 1) {
         e.dead = true; S.fridge = Math.max(0, S.fridge - D.drain); S.stats.leaks++;
         ev('fridge', { dmg: D.drain, etype: e.type, x: e.x, z: e.z, left: S.fridge });
       }
       if (e.type === 'gull' && rng() < h * 0.12) ev('squawk', { x: e.x, z: e.z });
+      // ---- pure annoyance: gulls poop on you, mowers honk, everyone taunts
+      e.tauntT -= h;
+      if (e.type === 'gull') {
+        e.poopCd -= h;
+        const pd = Math.hypot(P.x - e.x, P.z - e.z);
+        if (!P.dead && e.poopCd <= 0 && pd < 8 && pd > 1 && Math.abs(P.y - e.y) < 4) {
+          e.poopCd = 5 + rng() * 5;
+          const ox = e.x, oy = e.y + 1.3, oz = e.z, tx = P.x + P.vx * 0.5, ty = P.y + 1.7, tz = P.z + P.vz * 0.5;
+          const tf = 0.75, g = 18;
+          S.cones.push({ x: ox, y: oy, z: oz, vx: (tx - ox) / tf, vy: (ty - oy) / tf + 0.5 * g * tf, vz: (tz - oz) / tf, g, trapId: 0, life: 3, kind: 'poop' });
+          ev('poopLaunch', { id: e.id, x: ox, y: oy, z: oz });
+        }
+      } else if (e.type === 'mower') {
+        e.honkT -= h;
+        if (e.honkT <= 0) { e.honkT = 6 + rng() * 6; ev('honk', { id: e.id, x: e.x, z: e.z }); }
+      }
     }
     // separation (cheap O(n²), n ≤ ~70)
     const L = S.enemies;
@@ -631,11 +656,20 @@ export function createSim({ seed = 4207 } = {}) {
     for (const c of S.cones) {
       c.life -= h; c.vy -= c.g * h;
       c.x += c.vx * h; c.y += c.vy * h; c.z += c.vz * h;
-      if (!P.dead && Math.hypot(P.x - c.x, P.y + 1.1 - c.y, P.z - c.z) < 0.75) { c.dead = true; hurtPlayer(ENEMIES.possum.coneDmg, c.x, c.z); ev('coneHit', { x: c.x, y: c.y, z: c.z }); continue; }
+      if (!P.dead && Math.hypot(P.x - c.x, P.y + 1.3 - c.y, P.z - c.z) < 0.85) {
+        c.dead = true;
+        if (c.kind === 'poop') { hurtPlayer(2, c.x, c.z); ev('splat', { x: c.x, y: c.y, z: c.z }); continue; }
+        hurtPlayer(ENEMIES.possum.coneDmg, c.x, c.z); ev('coneHit', { x: c.x, y: c.y, z: c.z });
+        // the possum that threw it does a little victory bum-wiggle
+        let best = null, bd = 30;
+        for (const e of S.enemies) if (e.type === 'possum' && !e.dead) { const d = Math.hypot(e.x - c.x, e.z - c.z); if (d < bd) { bd = d; best = e; } }
+        if (best) { best.tauntT = 1.4; ev('taunt', { id: best.id, etype: 'possum' }); }
+        continue;
+      }
       const g = heightAt(c.x, c.z, c.y, 0);
       if (c.y <= g || solidAt(c.x, c.y, c.z) || c.life <= 0) {
         c.dead = true;
-        ev('impact', { x: c.x, y: Math.max(c.y, g), z: c.z, w: 'cone' });
+        ev('impact', { x: c.x, y: Math.max(c.y, g), z: c.z, w: c.kind === 'poop' ? 'poop' : 'cone' });
         if (c.trapId) {
           const tr = S.traps.find((t) => t.id === c.trapId);
           if (tr && Math.hypot(tr.x - c.x, tr.z - c.z) < 2.2) { tr.disabledT = ENEMIES.possum.disable; ev('trap', { act: 'disable', trap: tr }); ev('msg', { text: 'Yeah, nah! A possum gummed up your trap', small: true }); }
@@ -662,7 +696,7 @@ export function createSim({ seed = 4207 } = {}) {
 
   // ------------------------------------------------------------------ step
   function step(h, cmd) {
-    if (S.phase === 'won' || S.phase === 'lost') { S.t += h; return; }
+    if (S.phase === 'lost') { S.t += h; return; }
     S.t += h;
     // build / sell / wave control
     if (cmd.startWave) startWave();
@@ -690,16 +724,44 @@ export function createSim({ seed = 4207 } = {}) {
         S.money += bonus;
         ev('waveClear', { wave: S.wave, bonus });
         S.wave++;
-        if (S.wave >= WAVES.length) { S.phase = 'won'; ev('won', {}); }
-        else { S.phase = 'build'; S.buildT = ECONOMY.build; }
+        if (S.wave >= WAVES_PER_LEVEL) { S.phase = 'levelClear'; S.levelT = 4.5; ev('levelClear', { level: S.level }); }
+        else { S.phase = 'build'; S.buildT = ECONOMY.build; planWave(); }
       }
+    } else if (S.phase === 'levelClear') {
+      S.levelT -= h;
+      if (S.levelT <= 0) nextLevel();
     }
     if (S.fridge <= 0 && S.phase !== 'lost') { S.phase = 'lost'; ev('lost', {}); }
   }
 
+  // a brand-new randomly generated map: traps are packed up (full refund), the fridge gets a restock from the dairy
+  function nextLevel() {
+    let refund = 0;
+    for (const tr of S.traps) refund += tr.spent;
+    for (const p of S.pickups) refund += p.v;
+    S.money += refund;
+    S.traps = []; S.flyers = []; S.shots = []; S.cones = []; S.pickups = []; S.enemies = [];
+    S.level++; S.wave = 0;
+    S.layout = generateLevel(S.level, (rng() * 1e9) | 0);
+    setLevelBoxes(S.layout.boxes);
+    S.fridge = Math.min(S.fridgeMax, S.fridge + ECONOMY.restock);
+    S.phase = 'build'; S.buildT = ECONOMY.levelBuild;
+    planWave();
+    respawnPlayer(null);
+    S.player.yaw = S.layout.playerSpawn.yaw;
+    ev('levelStart', { level: S.level, name: S.layout.name, refund });
+  }
+
+  // the upcoming wave is decided at the start of each build phase (deterministic per level seed) so the HUD can preview it
+  function planWave() {
+    const d = (S.level - 1) * WAVES_PER_LEVEL + S.wave;
+    S.nextWave = waveFor(d, mulberry32((S.layout.seed * 31 + d * 977) | 0));
+    S.waveDef = S.nextWave;
+  }
+
   function drainEvents() { const e = S.events; S.events = []; return e; }
 
-  const sim = { state: null, reset, step, drainEvents, queryPlacement, raycastAll, sellTrap, startWave };
+  const sim = { state: null, reset, step, drainEvents, queryPlacement, raycastAll, sellTrap, startWave, nextLevel };
   reset();
   return sim;
 }

@@ -60,6 +60,8 @@ export function createFX(scene) {
   mk('pie', 16, () => new Mesh(new CylinderGeometry(0.2, 0.17, 0.1, 14), pieMat));
   const coneMat = new MeshStandardMaterial({ color: '#7a4a22', roughness: 1 });
   mk('cone', 30, () => new Mesh(new ConeGeometry(0.11, 0.26, 8), coneMat));
+  const poopMat = new MeshStandardMaterial({ color: '#f4f2ea', roughness: 0.4 });
+  mk('poop', 30, () => { const m = new Mesh(new SphereGeometry(0.11, 10, 8), poopMat); m.scale.set(1, 0.7, 1.3); return m; });
   const coinMat = new MeshStandardMaterial({ color: '#ffcc33', metalness: 0.9, roughness: 0.25, emissive: '#6a4a00', emissiveIntensity: 0.6 });
   mk('coin', 60, () => { const m = new Mesh(new CylinderGeometry(0.2, 0.2, 0.05, 16), coinMat); m.rotation.x = Math.PI / 2; return m; });
   for (const k in pools) for (const m of pools[k]) m.castShadow = false;
@@ -91,7 +93,8 @@ export function createFX(scene) {
     // projectiles (trail particles on the fizz bolts)
     syncPool('fizz', S.shots, (m, s) => { if (s.w !== 'fizz') return false; m.position.set(s.x, s.y, s.z); m.lookAt(s.x + s.vx, s.y + s.vy, s.z + s.vz); if (Math.random() < 0.5) emit(s.x, s.y, s.z, 1, { color: ['#fff7b0', '#ffe066'], speed: 0.4, life: 0.25, size: 0.12, gravity: -1 }); return true; });
     syncPool('pie', S.shots, (m, s) => { if (s.w !== 'pie') return false; m.position.set(s.x, s.y, s.z); m.rotation.x = t * 12; return true; });
-    syncPool('cone', S.cones, (m, c) => { m.position.set(c.x, c.y, c.z); m.rotation.set(t * 9, t * 5, 0); return true; });
+    syncPool('cone', S.cones, (m, c) => { if (c.kind === 'poop') return false; m.position.set(c.x, c.y, c.z); m.rotation.set(t * 9, t * 5, 0); return true; });
+    syncPool('poop', S.cones, (m, c) => { if (c.kind !== 'poop') return false; m.position.set(c.x, c.y, c.z); m.lookAt(c.x + c.vx, c.y + c.vy, c.z + c.vz); return true; });
     syncPool('coin', S.pickups, (m, p) => { m.position.set(p.x, p.y + Math.sin(t * 5 + p.id) * 0.08, p.z); m.rotation.z = t * 6 + p.id; return true; });
   }
 

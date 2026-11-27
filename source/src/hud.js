@@ -1,5 +1,5 @@
 // Minimal DOM HUD. Reads sim state (never writes it); main.js forwards UI actions through callbacks.
-import { TRAPS, WAVES, ENEMIES, WEAPONS, PLAYER } from './contracts.js';
+import { TRAPS, ENEMIES, WEAPONS, PLAYER, WAVES_PER_LEVEL } from './contracts.js';
 
 const ICON = { gull: '🐦', possum: '🐾', mower: '🚜' };
 
@@ -74,13 +74,35 @@ export function createHUD(root) {
     }
   }
 
+  // speech bubbles that ride above a character (getPos returns a world position or null when it's gone)
+  const bubbles = [];
+  function speech(text, getPos, cls = '', life = 2.2) {
+    let b = bubbles.find((x) => x.life <= 0);
+    if (!b) { if (bubbles.length > 10) return; const el = document.createElement('div'); els.speech.appendChild(el); b = { el, life: 0 }; bubbles.push(b); }
+    b.el.className = 'speech ' + cls; b.el.textContent = text; b.el.style.display = ''; b.getPos = getPos; b.life = life; b.max = life;
+  }
+  function updateBubbles(dt, project) {
+    for (const b of bubbles) {
+      if (b.life <= 0) continue;
+      b.life -= dt;
+      const w = b.getPos(); const p = w && project(w.x, w.y, w.z);
+      if (b.life <= 0 || !p) { b.el.style.display = 'none'; b.life = 0; continue; }
+      const pop = Math.min(1, (b.max - b.life) * 8);
+      b.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%) scale(${0.6 + 0.4 * pop})`;
+      b.el.style.opacity = Math.min(1, b.life * 3);
+    }
+  }
+  let splatT = 0;
+  function splat() { splatT = 3.2; for (const i of els.splat.querySelectorAll('i')) i.style.transform = `rotate(${Math.random() * 360}deg) scale(${0.8 + Math.random() * 0.5})`; }
+
   let dmgFlash = 0;
   function hurt() { dmgFlash = 1; }
 
   function update(dt, S, v) {
-    const P = S.player, W = WAVES[Math.min(S.wave, WAVES.length - 1)];
-    set('waveNo', `WAVE ${Math.min(S.wave + 1, WAVES.length)}/${WAVES.length}`);
+    const P = S.player, W = S.waveDef;
+    set('waveNo', `LVL ${S.level} · WAVE ${Math.min(S.wave + 1, WAVES_PER_LEVEL)}/${WAVES_PER_LEVEL}`);
     set('waveName', W.name);
+    set('levelName', S.layout.name);
     if (S.phase === 'build') {
       set('waveStatus', `Build time: <b>${Math.ceil(S.buildT)}s</b> — press <kbd>G</kbd> to send 'em early`, true);
       const counts = {};
@@ -90,8 +112,11 @@ export function createHUD(root) {
       const left = S.spawnQ.length + S.enemies.length;
       set('waveStatus', `Pests remaining: <b>${left}</b> / ${S.waveTotal}`, true);
       set('wavePreview', '', true);
+    } else if (S.phase === 'levelClear') {
+      set('waveStatus', 'Level sorted! Packing the traps into the ute…');
+      set('wavePreview', '', true);
     } else {
-      set('waveStatus', S.phase === 'won' ? 'The bach is safe. Chur.' : 'The chilly bin\'s empty…');
+      set('waveStatus', 'The chilly bin\'s empty…');
       set('wavePreview', '', true);
     }
     set('money', String(S.money));
@@ -132,13 +157,18 @@ export function createHUD(root) {
     dmgFlash = Math.max(0, dmgFlash - dt * 2.2);
     els.damage.style.opacity = Math.max(dmgFlash, P.hp < 35 && !P.dead ? 0.35 + 0.15 * Math.sin(S.t * 6) : 0).toFixed(2);
     updateFloaters(dt, v.project);
+    updateBubbles(dt, v.project);
+    splatT = Math.max(0, splatT - dt);
+    els.splat.style.opacity = Math.min(1, splatT / 1.2).toFixed(2);
   }
 
-  function gameOver(S, won) {
-    set('overTitle', won ? 'SWEET AS! BACH SAVED' : 'YEAH, NAH…');
-    set('overSub', won ? 'Every beer accounted for. Put the jandals up, you legend.' : 'The pests cleaned out the fridge. Harden up and have another crack.');
-    set('overStats', `<span>Waves survived</span><b>${S.wave}/${WAVES.length}</b><span>Pests sorted</span><b>${S.stats.kills}</b><span>Yeeted into the compost</span><b>${S.stats.yeets}</b><span>Trap combos</span><b>${S.stats.combos}</b><span>Best combo streak</span><b>${S.combo.best}</b><span>Beers left</span><b>${S.fridge}</b>`, true);
+  function gameOver(S) {
+    let best = S.level;
+    try { best = Math.max(best, +(localStorage.getItem('bach.best') || 0)); localStorage.setItem('bach.best', String(best)); } catch {}
+    set('overTitle', 'YEAH, NAH…');
+    set('overSub', `The pests cleaned out the fridge at ${S.layout.name}. Harden up and have another crack.`);
+    set('overStats', `<span>Level reached</span><b>${S.level}</b><span>Best level ever</span><b>${best}</b><span>Waves survived</span><b>${(S.level - 1) * WAVES_PER_LEVEL + S.wave}</b><span>Pests sorted</span><b>${S.stats.kills}</b><span>Yeeted into the compost</span><b>${S.stats.yeets}</b><span>Trap combos</span><b>${S.stats.combos}</b><span>Best combo streak</span><b>${S.combo.best}</b><span>Beers left</span><b>${S.fridge}</b>`, true);
   }
 
-  return { show, callout, banner, toast, floater, hurt, update, gameOver, els, slots, dismissHint() { els.controlHint.classList.toggle('mini'); } };
+  return { show, callout, banner, toast, floater, hurt, update, gameOver, speech, splat, els, slots, dismissHint() { els.controlHint.classList.toggle('mini'); } };
 }

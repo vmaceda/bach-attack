@@ -1,8 +1,9 @@
-// Collision world: pure math over contracts.BOXES (no three.js). Shared by player, enemies, projectiles, camera
+// Collision world: pure math over the active level's boxes (no three.js). Shared by player, enemies, projectiles, camera
 // collision (the renderer calls sweepSphere) and trap placement raycasts.
-import { BOXES } from '../contracts.js';
-
-export const boxes = BOXES;
+// The active level's boxes. Mutated in place by setLevelBoxes() when a new level is generated, so every importer
+// (sim, camera sweep, renderer) always sees the current map.
+export const boxes = [];
+export function setLevelBoxes(list) { boxes.length = 0; for (const b of list) boxes.push(b); }
 
 // highest walkable top under (x,z) that is at most stepUp above y (so you can step onto it)
 export function heightAt(x, z, y = 1e9, stepUp = 0.7) {

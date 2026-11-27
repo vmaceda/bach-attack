@@ -88,6 +88,40 @@ export function createAudio() {
       const v = ctx.createOscillator(), vg = ctx.createGain(); v.frequency.value = 22; vg.gain.value = 60; v.connect(vg); vg.connect(o.frequency); v.start(t); v.stop(t + 0.6);
       env(g, t, 0.005, 0.35, 0.55); o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.62); },
     stomp() { tone('sine', 90, 35, 0.3, 0.7); noise(0.15, 0.5, 'lowpass', 1200, 200, 0.7); tone('square', 70, 50, 0.1, 0.1); },
+    // formant "voice": a sawtooth glottis through two vowel formants, pitch contour per syllable
+    blurt(n = 10) {
+      const V = [[800, 1200], [500, 1900], [520, 900], [350, 800], [700, 1700]], t0 = now(), syl = Math.max(2, Math.min(9, Math.round(n / 3)));
+      const base = 115 + Math.random() * 20;
+      for (let i = 0; i < syl; i++) {
+        const t = t0 + i * 0.085, [f1, f2] = V[Math.floor(Math.random() * V.length)];
+        const o = ctx.createOscillator(), g = ctx.createGain(), b1 = ctx.createBiquadFilter(), b2 = ctx.createBiquadFilter();
+        o.type = 'sawtooth'; const p0 = base * (0.85 + Math.random() * 0.5) * (i === syl - 1 ? 1.25 : 1);
+        o.frequency.setValueAtTime(p0, t); o.frequency.linearRampToValueAtTime(p0 * (i === syl - 1 ? 1.3 : 0.92), t + 0.07);
+        b1.type = 'bandpass'; b1.frequency.value = f1; b1.Q.value = 6; b2.type = 'bandpass'; b2.frequency.value = f2; b2.Q.value = 8;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.55, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.075);
+        o.connect(b1); o.connect(b2); b1.connect(g); b2.connect(g); g.connect(master); o.start(t); o.stop(t + 0.09);
+      }
+    },
+    mine() { // "MI-INE!": nasal squawk, two pitch humps
+      const t = now();
+      for (const [dt, f] of [[0, 1500], [0.17, 1250]]) {
+        const o = ctx.createOscillator(), g = ctx.createGain(), bp = ctx.createBiquadFilter();
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(f * 0.8, t + dt); o.frequency.linearRampToValueAtTime(f, t + dt + 0.05); o.frequency.linearRampToValueAtTime(f * 0.7, t + dt + 0.16);
+        bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 3;
+        g.gain.setValueAtTime(0.0001, t + dt); g.gain.exponentialRampToValueAtTime(0.3, t + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.16);
+        o.connect(bp); bp.connect(g); g.connect(master); o.start(t + dt); o.stop(t + dt + 0.18);
+      }
+    },
+    giggle() { const t = now(); for (let i = 0; i < 5; i++) tone('triangle', 900 - i * 40, 700 - i * 40, 0.06, 0.09, t + i * 0.09); },
+    awooga() { // clown horn: AH-OOO-GA
+      const t = now(), o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      o.type = 'square'; o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(520, t + 0.35); o.frequency.setValueAtTime(330, t + 0.42); o.frequency.exponentialRampToValueAtTime(300, t + 0.6);
+      lp.type = 'lowpass'; lp.frequency.setValueAtTime(900, t); lp.frequency.linearRampToValueAtTime(2200, t + 0.35);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.03); g.gain.setValueAtTime(0.22, t + 0.38); g.gain.exponentialRampToValueAtTime(0.06, t + 0.41); g.gain.exponentialRampToValueAtTime(0.2, t + 0.45); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.62);
+      o.connect(lp); lp.connect(g); g.connect(master); o.start(t); o.stop(t + 0.65);
+    },
+    poosplat() { noise(0.25, 0.7, 'lowpass', 1800, 300, 1); tone('sine', 300, 80, 0.15, 0.3); },
+    pop() { tone('sine', 900, 200, 0.06, 0.3); noise(0.04, 0.3, 'highpass', 2000, 2000, 1); },
     lose() { const t = now(); [392, 349, 311, 262].forEach((f, i) => tone('triangle', f, f * 0.97, 0.45, 0.15, t + i * 0.3)); },
     win() { const t = now(); [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone('square', f, f, 0.18, 0.09, t + i * 0.12)); },
   };

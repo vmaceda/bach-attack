@@ -15,7 +15,8 @@
   <!-- HUD -->
   <div id="hud" class="hud" hidden>
     <div class="panel wave-panel">
-      <div class="wave-title"><span data-bind="waveNo">WAVE 1/8</span> <b data-bind="waveName"></b></div>
+      <div class="level-name" data-bind="levelName"></div>
+      <div class="wave-title"><span data-bind="waveNo">WAVE 1/3</span> <b data-bind="waveName"></b></div>
       <div class="wave-status" data-bind="waveStatus"></div>
       <div class="wave-preview" data-bind="wavePreview"></div>
     </div>
@@ -41,6 +42,8 @@
       <div class="keys">WASD move · Space jump · Shift dash · LMB fire · RMB/E blower · Q swap · B build · 1–8 traps · R rotate · X sell · G send wave · P/Esc pause · Tab free cursor · M mute · N music</div>
     </div>
     <div class="damage-edge" data-bind="damage"></div>
+    <div class="splat" data-bind="splat"><i></i><i></i><i></i><i></i><i></i><span>SPLAT! Seagull got ya, bro</span></div>
+    <div class="speech-layer" data-bind="speech"></div>
     <div class="dead-msg" data-bind="deadMsg"></div>
     <div class="floaters" data-bind="floaters"></div>
   </div>

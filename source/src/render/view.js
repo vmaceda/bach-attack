@@ -2,7 +2,7 @@
 // and beams push it in), and turns sim events into particles, sounds and HUD pops. Never mutates the sim.
 import { Vector3, Mesh, PlaneGeometry, BoxGeometry, MeshBasicMaterial, Group, ConeGeometry, BufferGeometry, Float32BufferAttribute, Line, LineBasicMaterial, AdditiveBlending } from 'three';
 import { makePlayer, ENEMY_MODEL, makeHealthBar, makeTrap, makeGhost, makeFlyingJandal } from './models.js';
-import { CAMERA, ENEMIES, TRAPS, TRAP_BY_ID, GOAL } from '../contracts.js';
+import { CAMERA, ENEMIES, TRAPS, TRAP_BY_ID } from '../contracts.js';
 import { sweepSphere } from '../sim/world.js';
 
 const D2R = Math.PI / 180;
@@ -95,23 +95,106 @@ export function createView({ scene, camera, fx, audio, hud }) {
   }
 
   // ------------------------------------------------------------------ actors
+  // ---- googly-eye physics: pupils are little damped springs kicked by every lurch, turn and landing
+  function wobbleEyes(eyes, kx, ky, dt) {
+    for (const e of eyes) {
+      e.vx += (-e.ox * 160 - e.vx * 7 + kx + (Math.random() - 0.5) * 6) * dt;
+      e.vy += (-e.oy * 160 - e.vy * 7 + ky - 9) * dt;
+      e.ox += e.vx * dt; e.oy += e.vy * dt;
+      const lim = e.r * 0.42, l = Math.hypot(e.ox, e.oy);
+      if (l > lim) { e.ox *= lim / l; e.oy *= lim / l; e.vx *= -0.4; e.vy *= -0.4; }
+      e.pupil.position.x = e.ox; e.pupil.position.y = e.oy;
+    }
+  }
+
+  // ---- BAZZA: bobble head, belly jiggle, waddle, and idle antics when you leave him alone
+  const BZ = { lastYaw: 0, lastSp: 0, lastVy: 0, headX: 0, headZ: 0, headVX: 0, headVZ: 0, belly: 0, bellyV: 0, idleT: 0, antic: -1, gum: 0, chat: 4 };
+  const BAZZA_IDLE = ['Is this thing on?', 'Bored as, bro', 'Wanna see me belly button?', 'Got any pies?', 'Yeah nah yeah nah', 'Hurry up, pests!', '*whistles badly*', 'Mum, look! No traps!'];
+  const BAZZA_HYPE = ['CHUR!', 'Sweet as, bro!', 'Hard out!', 'Too easy!', 'Mean as!', 'Yeah the boys!', 'Ka pai!', 'Get wrecked!', 'Oi oi oi!', 'She\'ll be right!'];
+  const BAZZA_HURT = ['OI!', 'Aw, mate!', 'Me mullet!', 'Not the face!', 'Rude!', 'Ow, ya egg!'];
+  const BAZZA_JUMP = ['Hup!', 'Wheee!', 'Look at me go!', 'Yeehaa!'];
+  let lastSpeech = 0, killChain = 0, killChainT = 0;
+  const bazzaPos = () => (player.visible || true) ? { x: player.position.x, y: player.position.y + 2.55, z: player.position.z } : null;
+  function bazzaSay(list, force) {
+    if (!force && t - lastSpeech < 2.5) return;
+    lastSpeech = t;
+    const text = typeof list === 'string' ? list : list[Math.floor(Math.random() * list.length)];
+    hud.speech(text, bazzaPos, 'bazza', 1.9);
+    audio.play('blurt', text.length, 0.3);
+  }
+
   function syncPlayer(dt, S, ctl) {
     const P = S.player;
     player.position.set(P.x, P.y, P.z);
     player.rotation.y = P.yaw;
     const sp = Math.hypot(P.vx, P.vz);
-    const ph = t * (sp > 0.5 ? 2.2 + sp * 0.9 : 0);
-    const sw = Math.min(1, sp / 6) * 0.75;
+    const ph = t * (sp > 0.5 ? 2.0 + sp * 0.8 : 0);
+    const sw = Math.min(1, sp / 6) * 0.8;
     PP.legs[0].rotation.x = Math.sin(ph) * sw; PP.legs[1].rotation.x = -Math.sin(ph) * sw;
-    PP.body.position.y = Math.abs(Math.sin(ph)) * 0.05 * sw;
-    PP.torso.rotation.x = (P.dashT > 0 ? -0.5 : 0) - (ctl.pitch * D2R) * 0.35 * (P.onGround ? 1 : 0.5);
+    // the waddle: big side-to-side sway like a man who has had four pies
+    PP.body.rotation.z = Math.sin(ph) * 0.16 * sw;
+    PP.body.position.y = Math.abs(Math.sin(ph)) * 0.07 * sw;
+    PP.torso.rotation.x = (P.dashT > 0 ? -0.5 : 0) - (ctl.pitch * D2R) * 0.3 * (P.onGround ? 1 : 0.5);
+    // springs driven by acceleration
+    const dyaw = Math.atan2(Math.sin(P.yaw - BZ.lastYaw), Math.cos(P.yaw - BZ.lastYaw)); BZ.lastYaw = P.yaw;
+    const acc = (sp - BZ.lastSp) / Math.max(dt, 1e-3); BZ.lastSp = sp;
+    const dvy = (P.vy - BZ.lastVy) / Math.max(dt, 1e-3); BZ.lastVy = P.vy;
+    BZ.headVX += (-BZ.headX * 90 - BZ.headVX * 5 - acc * 0.25 + Math.sin(ph * 2) * sw * 8) * dt;
+    BZ.headVZ += (-BZ.headZ * 90 - BZ.headVZ * 5 + dyaw / Math.max(dt, 1e-3) * 0.6) * dt;
+    BZ.headX += BZ.headVX * dt; BZ.headZ += BZ.headVZ * dt;
+    BZ.headX = Math.max(-0.6, Math.min(0.6, BZ.headX)); BZ.headZ = Math.max(-0.6, Math.min(0.6, BZ.headZ));
+    PP.neck.rotation.x = BZ.headX; PP.neck.rotation.z = BZ.headZ;
+    BZ.bellyV += (-BZ.belly * 140 - BZ.bellyV * 4 + (dvy < -30 ? 0 : -dvy * 0.02) + Math.sin(ph * 2) * sw * 10) * dt;
+    BZ.belly += BZ.bellyV * dt; BZ.belly = Math.max(-0.25, Math.min(0.25, BZ.belly));
+    PP.belly.scale.set(1 - BZ.belly * 0.5, 1 + BZ.belly, 1 - BZ.belly * 0.3);
+    PP.mullet.rotation.x = 0.25 - BZ.headX * 1.5 + sw * 0.3 * Math.sin(ph * 2 + 1);
+    wobbleEyes(PP.eyes, -dyaw / Math.max(dt, 1e-3) * 2 + acc * 0.1, -dvy * 0.08, dt);
+    // idle antics (dance / belly drum / bubble gum) after 3 s of doing nothing
+    const busy = sp > 0.5 || S.t - P.firedT < 1.5 || S.t - P.blowT < 1 || ctl.build || P.dead || !P.onGround;
+    BZ.idleT = busy ? 0 : BZ.idleT + dt;
+    const anticT = BZ.idleT - 3;
+    const antic = anticT > 0 ? Math.floor(anticT / 4) % 3 : -1;
+    if (antic !== BZ.antic) { BZ.antic = antic; if (antic >= 0) bazzaSay(BAZZA_IDLE, true); }
+    PP.gun.visible = antic < 0;
+    let armRx = -1.2, armRz = 0, armLx = -1.35, armLz = 0.55, bodyY = 0;
+    if (antic === 0) { // the dance
+      const d = t * 9;
+      armRx = -2.6 + Math.sin(d) * 0.5; armLx = -2.6 - Math.sin(d) * 0.5; armRz = -0.4; armLz = 0.4;
+      bodyY = Math.sin(d * 0.5) * 0.6; PP.body.position.y = Math.abs(Math.sin(d)) * 0.08; PP.body.rotation.z = Math.sin(d) * 0.2;
+    } else if (antic === 1) { // drumming the belly
+      const d = t * 12;
+      armRx = -0.5 + Math.max(0, Math.sin(d)) * 0.5; armLx = -0.5 + Math.max(0, -Math.sin(d)) * 0.5; armRz = 0.5; armLz = -0.5;
+      if (Math.sin(d) > 0.97 || Math.sin(d) < -0.97) { BZ.bellyV += 3; }
+    } else if (antic === 2) { // bubble gum, then POP
+      const g = (anticT % 4) / 3.2;
+      if (g < 1) PP.gum.scale.setScalar(0.01 + g * 2.4);
+      else if (PP.gum.scale.x > 0.5) { PP.gum.scale.setScalar(0.01); audio.play('pop'); fx.emit(player.position.x, player.position.y + 2.3, player.position.z, 8, { color: '#ff7ac8', speed: 2, life: 0.4, size: 0.12, gravity: 4 }); }
+    }
+    if (antic !== 2) PP.gum.scale.setScalar(0.01);
+    PP.armR.rotation.set(armRx, 0, armRz); PP.armL.rotation.set(armLx, 0, armLz);
+    PP.body.rotation.y = bodyY;
     PP.body.rotation.x = P.dead ? -Math.PI / 2 : 0;
     PP.body.position.z = P.dead ? 0.6 : 0;
     PP.fizz.visible = P.weapon === 'fizz'; PP.pie.visible = P.weapon === 'pie';
     const since = S.t - P.firedT;
-    PP.gun.position.z = -0.42 + (since < 0.08 ? 0.08 * (1 - since / 0.08) : 0);
+    PP.gun.position.z = -0.5 + (since < 0.08 ? 0.08 * (1 - since / 0.08) : 0);
     const bsince = S.t - P.blowT;
     PP.blower.rotation.z = bsince < 0.4 ? Math.sin(bsince * 50) * 0.08 : 0;
+    // random hype chatter mid-fight
+    killChainT -= dt; if (killChainT <= 0) killChain = 0;
+  }
+
+  // ---- pests talk too. Constantly.
+  const PEST_LINES = {
+    gull: ['MINE!', 'MINE! MINE!', 'Chips?', 'Oi, gimme a chip', 'Squawk off, bro', 'You gonna eat that?', 'Hot chips or riot!'],
+    possum: ['Heh heh heh', 'Yoink!', 'Smells like pie', 'Nice mullet lol', 'Catch, bro!', 'Pest? I prefer "guest"'],
+    mower: ['VROOOOM', 'LAWN AND ORDER!', 'MOW-HAWK!', 'I\'M CUTTING THROUGH!', 'GRASS IS ALWAYS GREENER!', 'HONK HONK'],
+  };
+  const TAUNT = ['GOT YA BRO!', 'Hehehe, sucked in!', 'Bullseye!', 'Pine cone to the face!'];
+  let pestChat = 3;
+  function pestSay(e, text) {
+    const id = e.id;
+    hud.speech(text, () => { const v = enemies.get(id); return v ? { x: v.root.position.x, y: v.root.position.y + ENEMIES[v.type].height + 0.9, z: v.root.position.z } : null; }, 'pest', 1.7);
   }
 
   function syncEnemies(dt, S) {
@@ -139,6 +222,9 @@ export function createView({ scene, camera, fx, audio, hud }) {
       // stun wobble / airborne tumble
       Pp.body.rotation.z = e.stunT > 0 ? Math.sin(t * 18) * 0.25 : !e.onGround ? Math.sin(t * 14 + e.id) * 0.5 : 0;
       Pp.body.rotation.x = !e.onGround && e.vy < -3 ? -0.6 : 0;
+      const dyawE = Math.atan2(Math.sin(e.yaw - (v.lastYaw ?? e.yaw)), Math.cos(e.yaw - (v.lastYaw ?? e.yaw))); v.lastYaw = e.yaw;
+      if (Pp.eyes) wobbleEyes(Pp.eyes, -dyawE / Math.max(dt, 1e-3) * 1.5 + (sp - (v.lastSp || 0)) * 3, (e.onGround ? 0 : e.vy * 2) + (v.pop > 0.5 ? 30 : 0), dt);
+      v.lastSp = sp;
       if (e.type === 'gull') {
         const ph = v.roll * 5;
         Pp.legs[0].rotation.x = Math.sin(ph) * 0.9; Pp.legs[1].rotation.x = -Math.sin(ph) * 0.9;
@@ -149,12 +235,17 @@ export function createView({ scene, camera, fx, audio, hud }) {
         const ph = v.roll * 4;
         Pp.legs[0].rotation.x = Math.sin(ph) * 0.7; Pp.legs[1].rotation.x = -Math.sin(ph) * 0.7;
         Pp.tail.rotation.z = Math.sin(t * 3 + e.id) * 0.4;
+        if (e.tauntT > 0) { // victory bum-wiggle
+          R.rotation.y = e.yaw + Math.PI; Pp.body.rotation.z = Math.sin(t * 22) * 0.35; Pp.tail.rotation.z = Math.sin(t * 30) * 0.9; Pp.body.position.y = Math.abs(Math.sin(t * 11)) * 0.12;
+        } else Pp.body.position.y = 0;
         const throwP = e.mode === 'shoot' ? Math.max(0, 1 - (ENEMIES.possum.every - e.shootT) * 3) : 0;
         Pp.arm.rotation.x = e.mode === 'shoot' ? -2.4 + (1 - Math.min(1, e.shootT)) * 2 : 0;
         Pp.cone.visible = e.mode !== 'shoot' || e.shootT < ENEMIES.possum.every - 0.4;
       } else {
         for (const w of Pp.wheels) w.rotation.x = -v.roll * 3;
         Pp.blade.rotation.y = t * 40;
+        const hk = v.honk = Math.max(0, (v.honk || 0) - dt * 3);
+        Pp.horn.scale.set(1 + hk * 0.6, 1 + hk * 0.6, 1 - hk * 0.4);
         Pp.body.position.y = Math.sin(t * 45) * 0.012;
         if (Math.random() < dt * 6) fx.emit(e.x + Math.sin(e.yaw) * -0.3, e.y + 1.5, e.z, 1, { color: ['#555555', '#777777'], speed: 0.6, life: 1.2, size: 0.35, gravity: -1.5, grow: 0.6 });
       }
@@ -305,6 +396,7 @@ export function createView({ scene, camera, fx, audio, hud }) {
           fx.emit(e.x, e.y + 0.6, e.z, kf.n, { ...kf, life: 1.1, up: 2 });
           if (e.etype === 'mower') { fx.emit(e.x, e.y + 0.8, e.z, 24, { color: ['#444', '#666', '#888'], speed: 3, life: 1.6, size: 0.6, gravity: -1.5, grow: 1, alpha: 0.7 }); cam.shake = 0.25; }
           audio.play(DIE_SFX[e.etype], null, 0.05);
+          killChain++; killChainT = 3; if (killChain === 4 || killChain === 8) bazzaSay(killChain === 8 ? 'UNSTOPPABLE, BRO!' : BAZZA_HYPE, true);
           if (e.how !== 'pit') hud.floater('+' + e.bounty, 'money', e.x, e.y + 1.4, e.z);
           break;
         }
@@ -315,6 +407,7 @@ export function createView({ scene, camera, fx, audio, hud }) {
           break;
         case 'combo':
           hud.callout(e.text, `${e.chain}  +${e.bonus}`);
+          if (e.n >= 3 || Math.random() < 0.3) bazzaSay(BAZZA_HYPE);
           audio.play('combo', e.n, 0.08);
           hud.floater(`${e.n}-HIT COMBO`, 'crit', e.x, e.y + 2, e.z);
           break;
@@ -324,13 +417,18 @@ export function createView({ scene, camera, fx, audio, hud }) {
           audio.play('fridge', null, 0.1);
           const name = ENEMIES[e.etype].name;
           hud.toast(`Yeah, nah! A ${name} nicked ${e.dmg} beer${e.dmg > 1 ? 's' : ''} (${e.left} left)`, 'deny');
-          hud.floater(`-${e.dmg} 🍺`, 'yeet', GOAL.x, 2.6, GOAL.z + 1);
-          fx.emit(GOAL.x, 1.5, GOAL.z + 1, 14, { color: ['#7fe3ff', '#ffffff', '#5a2d0c'], speed: 4, life: 0.8, size: 0.2, gravity: 8 });
+          hud.speech(e.etype === 'gull' ? 'MINE!!!' : e.etype === 'possum' ? 'Cheers for the beer!' : 'SKOL!', () => ({ x: S.layout.goal.x, y: 3, z: S.layout.goal.z }), 'pest', 1.6);
+          if (e.etype === 'gull') audio.play('mine', null, 0.3);
+          bazzaSay(['Not me beers!', 'OI! THAT\'S MINE!', 'Yeah, nah!'], false);
+          hud.floater(`-${e.dmg} 🍺`, 'yeet', S.layout.goal.x, 2.6, S.layout.goal.z + 1);
+          fx.emit(S.layout.goal.x, 1.5, S.layout.goal.z + 1, 14, { color: ['#7fe3ff', '#ffffff', '#5a2d0c'], speed: 4, life: 0.8, size: 0.2, gravity: 8 });
           break;
         }
         case 'waveStart': audio.play('horn'); hud.banner(`WAVE ${e.wave + 1}: ${e.name.toUpperCase()}`, 'Here they come — chuck another snag on!', '#ffd21f'); break;
+        case 'levelClear': audio.play('win'); hud.banner(`LEVEL ${e.level} SORTED!`, 'Chucking the traps in the ute — new bach incoming…', '#4dff7a'); break;
+        case 'levelStart': audio.play('horn'); hud.banner(`LEVEL ${e.level}`, e.name, '#ffd21f'); hud.toast(`Traps refunded: +${e.refund} shrapnel · fridge restocked from the dairy`); break;
         case 'waveClear': audio.play('clear'); hud.banner('WAVE CLEARED — CHUR!', `+${e.bonus} shrapnel · build up, then press G`, '#4dff7a'); break;
-        case 'playerHurt': hud.hurt(); audio.play('hurt', null, 0.1); cam.shake = Math.max(cam.shake, 0.08); break;
+        case 'playerHurt': hud.hurt(); audio.play('hurt', null, 0.1); if (Math.random() < 0.5) bazzaSay(BAZZA_HURT); cam.shake = Math.max(cam.shake, 0.08); break;
         case 'playerDead': hud.toast('Munted by a pine cone. Respawning…', 'deny'); break;
         case 'respawn': hud.toast(e.text); break;
         case 'msg': hud.toast(e.text); break;
@@ -358,7 +456,11 @@ export function createView({ scene, camera, fx, audio, hud }) {
         case 'land': fx.emit(e.x, e.y + 0.1, e.z, e.etype === 'mower' ? 14 : 6, { color: ['#c8b89a', '#8a7a5a'], speed: 2.5, life: 0.6, size: 0.35, gravity: 1, grow: 0.5, alpha: 0.6 }); break;
         case 'jandalHit': audio.play('slap', null, 0.04); hud.floater('SLAP!', 'trap', e.x, e.y + 0.6, e.z); fx.emit(e.x, e.y, e.z, 10, { color: ['#ffffff', '#2f6ff0'], speed: 4, life: 0.4, size: 0.15, gravity: 5 }); cam.shake = Math.max(cam.shake, 0.04); break;
         case 'jandalLand': audio.play('thud', null, 0.08); fx.emit(e.x, e.y + 0.05, e.z, 6, { color: ['#c8b89a', '#8a7a5a'], speed: 1.5, life: 0.5, size: 0.3, gravity: 1, grow: 0.4, alpha: 0.6 }); break;
-        case 'jump': audio.play('jump'); break;
+        case 'jump': audio.play('jump'); if (Math.random() < 0.35) bazzaSay(BAZZA_JUMP); break;
+        case 'splat': hud.splat(); audio.play('poosplat'); bazzaSay(['Aw, MATE!', 'Right in the mullet!', 'Not again!', 'Is that... yep.'], true); break;
+        case 'poopLaunch': audio.play('squawk', null, 0.2); if (Math.random() < 0.4) { const g = S.enemies.find((q) => q.id === e.id); if (g) pestSay(g, ['Bombs away!', 'Special delivery!', 'Incoming!', 'Hehe, gotcha'][Math.floor(Math.random() * 4)]); } break;
+        case 'honk': { audio.play('awooga', null, 0.4); const v = enemies.get(e.id); if (v) v.honk = 1; const m = S.enemies.find((q) => q.id === e.id); if (m && Math.random() < 0.5) pestSay(m, PEST_LINES.mower[Math.floor(Math.random() * PEST_LINES.mower.length)]); break; }
+        case 'taunt': { audio.play('giggle', null, 0.3); const m = S.enemies.find((q) => q.id === e.id); if (m) pestSay(m, TAUNT[Math.floor(Math.random() * TAUNT.length)]); break; }
         case 'dash': audio.play('dash'); fx.emit(e.x, e.y + 0.3, e.z, 10, { color: ['#ffffff', '#c8d8e8'], speed: 2, life: 0.4, size: 0.3, gravity: 0, alpha: 0.6 }); break;
         case 'swap': audio.play('swap'); hud.toast(e.w === 'pie' ? 'Mince Pie Launcher — splash damage, big arc' : 'L&P Fizz Cannon — aim high for cracker shots'); break;
         default: break;
@@ -400,6 +502,16 @@ export function createView({ scene, camera, fx, audio, hud }) {
     syncEnemies(dt, S);
     syncTraps(dt, S);
     updateGhost(ctl, q);
+    // background pest chatter: some random visible pest says something annoying every few seconds
+    pestChat -= dt;
+    if (pestChat <= 0 && S.enemies.length) {
+      pestChat = 2.5 + Math.random() * 3.5;
+      const e = S.enemies[Math.floor(Math.random() * S.enemies.length)];
+      if (Math.hypot(e.x - S.player.x, e.z - S.player.z) < 30) {
+        const L = PEST_LINES[e.type]; pestSay(e, L[Math.floor(Math.random() * L.length)]);
+        if (e.type === 'gull') audio.play('mine', null, 1); else if (e.type === 'possum') audio.play('giggle', null, 1);
+      }
+    }
     // flying jandals: frisbee spin + wobble, pointing along their flight
     for (let i = 0; i < flyers.length; i++) {
       const m = flyers[i], f = S.flyers[i];
@@ -416,5 +528,5 @@ export function createView({ scene, camera, fx, audio, hud }) {
     audio.setMower(near < 40 ? 1 - near / 40 : 0);
   }
 
-  return { update, updateCamera, titleCamera, handle, reset, cam, get hitMark() { return hitMark; } };
+  return { update, updateCamera, titleCamera, handle, reset, cam, BZ, get hitMark() { return hitMark; } };
 }

@@ -14,7 +14,7 @@ import { createView } from './render/view.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
 import { createHUD } from './hud.js';
-import { CAMERA, TRAPS, PLAYER_SPAWN, SEED } from './contracts.js';
+import { CAMERA, TRAPS } from './contracts.js';
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('c');
@@ -27,7 +27,7 @@ try { gfx = createScene(canvas); } catch (err) {
 }
 const { renderer, scene, camera } = gfx;
 const post = createPost(renderer, scene, camera, params);
-const sim = createSim({ seed: +(params.get('seed') || SEED) });
+const sim = createSim({ seed: +(params.get('seed') || (Date.now() % 1e9)) }); // a different run of random levels every game
 const fx = createFX(scene);
 const audio = createAudio();
 const hud = createHUD(uiRoot);
@@ -35,7 +35,7 @@ const view = createView({ scene, camera, fx, audio, hud });
 const input = createInput(canvas);
 if (params.get('drag')) input.forceMode('drag');
 
-const ctl = { yaw: PLAYER_SPAWN.yaw, pitch: 12, build: false, trap: 0, rot: 0 };
+const ctl = { yaw: sim.state.layout.playerSpawn.yaw, pitch: 12, build: false, trap: 0, rot: 0 };
 let cmd = blankCmd();
 let state = 'title', overTimer = 0, place = null;
 
@@ -74,7 +74,7 @@ function resume() {
 function restart() {
   sim.reset(); view.reset(); fixed.reset();
   cmd = blankCmd();
-  Object.assign(ctl, { yaw: PLAYER_SPAWN.yaw, pitch: 12, build: false, trap: 0, rot: 0 });
+  Object.assign(ctl, { yaw: sim.state.layout.playerSpawn.yaw, pitch: 12, build: false, trap: 0, rot: 0 });
   overTimer = 0;
   audio.init();
   setState('playing');
@@ -173,7 +173,8 @@ function frame(dt) {
   const events = sim.drainEvents();
   view.handle(events, S);
   for (const e of events) {
-    if (e.type === 'won' || e.type === 'lost') { overTimer = 1.6; audio.play(e.type === 'won' ? 'win' : 'lose'); hud.gameOver(S, e.type === 'won'); }
+    if (e.type === 'lost') { overTimer = 1.6; audio.play('lose'); hud.gameOver(S); }
+    if (e.type === 'levelStart') { ctl.yaw = S.layout.playerSpawn.yaw; ctl.pitch = 14; ctl.build = false; }
   }
   if (overTimer > 0) { overTimer -= dt; if (overTimer <= 0 && state === 'playing') { setState('over'); if (document.pointerLockElement) input.releaseLock(); } }
 

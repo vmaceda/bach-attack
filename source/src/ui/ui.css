@@ -41,6 +41,7 @@ button { font-family: inherit; }
 .panel { position: absolute; background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(4px); }
 .wave-panel { top: 14px; left: 14px; min-width: 270px; max-width: 360px; }
 .wave-title { font: 20px var(--font-display); letter-spacing: 1px; }
+.level-name { font-size: 12px; font-weight: 800; color: var(--accent2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
 .wave-title b { color: var(--accent); font-weight: normal; }
 .wave-status { margin-top: 2px; color: var(--muted); }
 .wave-status kbd, .build-banner b, kbd { background: rgba(255, 255, 255, .18); border-radius: 4px; padding: 0 5px; font-family: inherit; font-weight: 700; }
@@ -112,6 +113,20 @@ button { font-family: inherit; }
 .floaters { position: absolute; inset: 0; overflow: hidden; }
 .fl { position: absolute; left: 0; top: 0; font-weight: 900; font-size: 15px; color: #fff; text-shadow: 0 2px 0 #000, 0 0 4px #000; white-space: nowrap; will-change: transform; }
 .fl.crit { color: #ffd21f; font-size: 21px; } .fl.money { color: #ffd21f; } .fl.trap { color: #7fe3ff; } .fl.yeet { color: #ff9a3c; font-size: 22px; }
+.splat { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.splat i { position: absolute; border-radius: 47% 53% 42% 58% / 55% 45% 55% 45%; background: radial-gradient(circle at 40% 35%, #ffffff 0%, #f1efe4 45%, #d9d6c4 70%, rgba(200,196,170,0.0) 72%); filter: drop-shadow(0 3px 2px rgba(0,0,0,.35)); }
+.splat i:nth-child(1) { left: 18%; top: 12%; width: 34vmin; height: 30vmin; }
+.splat i:nth-child(2) { left: 52%; top: 30%; width: 22vmin; height: 26vmin; }
+.splat i:nth-child(3) { left: 30%; top: 52%; width: 16vmin; height: 14vmin; }
+.splat i:nth-child(4) { left: 64%; top: 8%; width: 12vmin; height: 18vmin; }
+.splat i:nth-child(5) { left: 8%; top: 58%; width: 10vmin; height: 9vmin; }
+.splat span { position: absolute; top: 72%; width: 100%; text-align: center; font: 30px var(--font-display); color: #fff; text-shadow: 0 3px 0 #7a5a2a; }
+.speech-layer { position: absolute; inset: 0; overflow: hidden; }
+.speech { position: absolute; left: 0; top: 0; max-width: 220px; padding: 5px 10px; border-radius: 14px; background: #fff; color: #1a1a1a; text-shadow: none;
+  font: 800 14px var(--font); white-space: nowrap; box-shadow: 0 3px 0 rgba(0,0,0,.25); will-change: transform; }
+.speech::after { content: ""; position: absolute; left: 50%; bottom: -8px; margin-left: -6px; border: 8px solid transparent; border-top-color: #fff; border-bottom: 0; }
+.speech.bazza { background: #ffd21f; font-size: 16px; } .speech.bazza::after { border-top-color: #ffd21f; }
+.speech.pest { background: #ffe0e0; } .speech.pest::after { border-top-color: #ffe0e0; }
 .noscript { position: fixed; inset: 0; display: grid; place-content: center; }
 @media (max-width: 1150px) { .hotbar .slot { width: 70px; } .slot .n { font-size: 11px; } .player-panel { min-width: 200px; } }
 @media (max-width: 900px) { .hotbar .slot { width: 62px; } .slot .m { display: none; } .control-hint { display: none; } .callout { font-size: 44px; } }
